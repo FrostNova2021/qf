@@ -7,7 +7,7 @@ all:
 	clang example2.c sanitize_converage.o -fsanitize-coverage=trace-pc-guard -o example2
 
 clean:
-	rm -rf sanitize_converage
+	rm -rf sanitize_converage.o
 	rm -rf example1
 	rm -rf example2
 

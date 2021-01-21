@@ -15,6 +15,7 @@
 #endif // __clang__
 
 #define ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__((no_sanitize_address))
+#define ATTRIBUTE_NO_SANITIZE_UNDEFINED __attribute__((no_sanitize("undefined")))
 
 #if defined(__has_feature)
 #  if __has_feature(address_sanitizer)

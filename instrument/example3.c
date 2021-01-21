@@ -3,19 +3,9 @@
 #include <stdio.h>
 
 
-void try_write(int a) {
-    printf("try write !!!\n");
 
-    if (a==1) {
-        ;
-    } else {
-        ;
-    }
-}
-
-
-int try_read(int b) {
-    printf("try read !!!\n");
+int foo(int b) {
+    printf("foo !!\n");
 
     if (b==1) {
         ;
@@ -29,10 +19,10 @@ int try_read(int b) {
 
 int main(int argc,char** argv) {
     dev_enter();
+
     printf("main running !!!\n");
 
-    try_write(1);
-    try_read(2);
+    foo(2);
 
     printf("main exit !!\n");
 

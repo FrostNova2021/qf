@@ -14,4 +14,5 @@ clean:
 	rm -rf example2
 	rm -rf example3
 	rm -rf fuzzer
+	rm -rf temp_*
 

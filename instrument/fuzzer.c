@@ -5,7 +5,8 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include <linux/shm.h>
+//#include <linux/shm.h>
+#include <sys/msg.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -44,34 +45,26 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
     //if (SIGUSR1 != signal_code)
     //    return;
 
-    int parameter_1 = singnal_info->si_value.sival_int;
-    int parameter_2 = singnal_info->si_value.sival_ptr;
+    int parameter = singnal_info->si_value.sival_int;
     int subprocess_pid = singnal_info->si_pid;
 
     switch (signal_code) {
         case SIGNAL_CREATE_FUZZER_TARGET: {
-            //  parameter_1  =>  pipe write file handle
-            //  parameter_2  =>  share memory id
-            int pipe_write = parameter_1 >> 16 & 0xFF;
-            int pipe_read  = parameter_1 & 0xFF;
+            //  parameter  =>  pid
+            int pid = parameter;
             
             printf("Create SubProcess Success ==> PID:%d \n",subprocess_pid);
 
             sub_fuzzer_share_memory_table[current_all_sub_fuzzer].start_time = time();
             sub_fuzzer_share_memory_table[current_all_sub_fuzzer].pid = subprocess_pid;
-            sub_fuzzer_share_memory_table[current_all_sub_fuzzer].pipe_write = pipe_write;
-            sub_fuzzer_share_memory_table[current_all_sub_fuzzer].pipe_read = pipe_read;
 
             current_all_sub_fuzzer++;
 
             break;
         } case SIGNAL_FUZZ_ONCE: {
-            //  parameter_1  =>  trace count
-            //  parameter_2  =>  buffer size
-            int trace_count = parameter_1;
-            int buffer_size = parameter_2;
+            //  parameter  =>  fuzz_index
+            int trace_count = parameter;
 
-            printf("int %d\n",singnal_info->si_value.sival_int);
             printf("SubProcess Fuzz ==> PID:%d All Edge:%d \n",subprocess_pid,trace_count);
 
             subprocess_envirement* subprocess_data = get_subprocess_envirement(subprocess_pid);
@@ -82,6 +75,7 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
                 return;
             }
 
+            /*
             unsigned long* coverage_result = (unsigned long*)malloc(buffer_size);
             unsigned long read_offset = 0;
             int read_length = 0;
@@ -96,6 +90,7 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
 
             printf("%d  length=%d\n",subprocess_data->pipe_read,read_length);
 
+            */
             break;
         } default: {
             printf("Error Status Code ==> PID:%d \n",subprocess_pid);

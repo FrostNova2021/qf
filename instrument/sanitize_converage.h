@@ -29,4 +29,22 @@
 #  define ATTRIBUTE_NO_SANITIZE_ALL
 #endif
 
+
+
+
+#define MAX_PATH_SIZE 512
+
+#ifdef __x86_64__
+typedef uint64_t uint_t;
+#else
+typedef uint32_t uint_t;
+#endif
+
+typedef struct {
+    uint_t current_address;
+    uint_t current_function_edge_count;
+    uint_t current_function_entry;
+} __sancov_trace_pc_map;
+
+
 #endif

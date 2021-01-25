@@ -1,11 +1,12 @@
 
 #include <error.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
 
-//#include <linux/shm.h>
+#include <sys/stat.h>
 #include <sys/msg.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -26,7 +27,8 @@ typedef struct _ {
 
 
 subprocess_envirement sub_fuzzer_share_memory_table[MAX_FUZZER_SUBPROCESS] = {0};
-static int current_all_sub_fuzzer = 0;
+int current_all_sub_fuzzer = 0;
+pid_t current_fuzzer_pid = 0;
 
 
 subprocess_envirement* get_subprocess_envirement(int pid) {
@@ -75,22 +77,38 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
                 return;
             }
 
-            /*
-            unsigned long* coverage_result = (unsigned long*)malloc(buffer_size);
-            unsigned long read_offset = 0;
+            char save_coverage_path[MAX_PATH_SIZE] = {0};
+
+            sprintf(save_coverage_path,"./temp_%d_%d/%d.dat",current_fuzzer_pid,subprocess_pid,trace_count);
+
+            int save_data_handle = open(save_coverage_path,O_RDONLY);
+            struct stat file_state = {0};
+
+            fstat(save_data_handle, &file_state);
+
+            uint_t trace_pc_map_count = 0;
+
+            read(save_data_handle,&trace_pc_map_count,sizeof(uint_t));
+
+            uint_t coverage_result_size = file_state.st_size - sizeof(uint_t);
+            __sancov_trace_pc_map* coverage_result = (__sancov_trace_pc_map*)malloc(coverage_result_size);
+            uint_t read_offset = 0;
             int read_length = 0;
 
-            memset(coverage_result,0,buffer_size);
+            memset(coverage_result,0,coverage_result_size);
 
-            while ((read_length = read(subprocess_data->pipe_read,
-                                        &coverage_result[read_offset],
+            while ((read_length = read(save_data_handle,
+                                        &((unsigned char*)coverage_result)[read_offset],
                                         MAX_FUZZER_READ_PIPE_DATA_SIZE)) > 0) {
                 read_offset += read_length;
             }
 
-            printf("%d  length=%d\n",subprocess_data->pipe_read,read_length);
+            for (uint_t index = 0;index < trace_pc_map_count;++index) {
+                printf("%d %d Coverage ID %X ,Count %d\n",index,trace_pc_map_count,
+                        coverage_result[index].current_address,
+                        coverage_result[index].current_function_edge_count);
+            }
 
-            */
             break;
         } default: {
             printf("Error Status Code ==> PID:%d \n",subprocess_pid);
@@ -130,6 +148,7 @@ int main(int argc,char** argv) {
         execl(argv[1],NULL);
     } else {
         int status;
+        current_fuzzer_pid = getpid();
 
         while(waitpid(pid, &status, 0) < 0);
 

@@ -15,24 +15,23 @@
 #include "sanitize_converage.h"
 #include "signal_number.h"
 
-#define MAX_PATH_SIZE 512
-
 /// -fsanitize-coverage-whitelist=
+
 
 
 static int __sancov_trace_pc_switch = 1;
 static const size_t __sancov_trace_pc_map_max = 1 << 16;
-static const size_t __sancov_trace_pc_map_size = __sancov_trace_pc_map_max * sizeof(unsigned long);
-static unsigned long  __sancov_trace_pc_table[__sancov_trace_pc_map_max] = {0};
+static const size_t __sancov_trace_pc_map_size = __sancov_trace_pc_map_max * sizeof(__sancov_trace_pc_map);
+static __sancov_trace_pc_map __sancov_trace_pc_table[__sancov_trace_pc_map_max] = {0};
 static unsigned long __sancov_trace_pc_index = 0;
 static unsigned long __sancov_current_all_guard_count = 0;
 static pid_t __sancov_father_pid = 0;
-static int __sancov_fuzz_loop = 0;
+static unsigned long  __sancov_fuzz_loop = 0;
 
 
 ATTRIBUTE_NO_SANITIZE_ALL
 void __sanitizer_cov_trace_pc_guard_init(uint32_t *start,uint32_t *stop) {
-    static uint64_t N;
+    uint_t id = 0;
 
     if (start == stop || *start)
         return;
@@ -43,8 +42,6 @@ void __sanitizer_cov_trace_pc_guard_init(uint32_t *start,uint32_t *stop) {
         union sigval send_sigval;
         send_sigval.sival_int = getpid();
 
-        //printf("fuzzer pid = %d \n",__sancov_father_pid);
-
         sigqueue(__sancov_father_pid,SIGNAL_CREATE_FUZZER_TARGET,send_sigval);
     } else {
         //memset(__sancov_trace_pc_table,0,__sancov_trace_pc_map_size);
@@ -54,14 +51,16 @@ void __sanitizer_cov_trace_pc_guard_init(uint32_t *start,uint32_t *stop) {
 
     printf("Sanitizer All Coverage edges: 0x%X \n",__sancov_current_all_guard_count);
 
-    for (uint32_t *x = start; x < stop; x++)
-        *x = ++N;
+    for (uint32_t* edge_id = start; edge_id < stop; ++edge_id)
+        *edge_id = ++id;
 }
 
 ATTRIBUTE_NO_SANITIZE_ALL
-void __sanitizer_cov_trace_pc_guard(uint32_t *guard) {
-    uint32_t edge_address = (uint32_t)guard;
-    uint32_t edge_id = *guard;
+void __sanitizer_cov_trace_pc_guard(uint32_t *guard,uint32_t count,uint32_t function_id) {
+    uint_t edge_address = (uint_t)guard;
+    uint_t edge_id = *guard;
+
+    printf("edge_id = %d\n",edge_id);
 
     if (!edge_id || !__sancov_trace_pc_switch)
         return;
@@ -70,26 +69,34 @@ void __sanitizer_cov_trace_pc_guard(uint32_t *guard) {
     char symbolize_data[1024];
     char current_function_name[512];
 
-    __sanitizer_symbolize_pc(PC, "%p %F %L %n ", symbolize_data, sizeof(symbolize_data));
+    __sanitizer_symbolize_pc(PC, "%p %F %L", symbolize_data, sizeof(symbolize_data));
     __sanitizer_symbolize_pc(PC, "%F", current_function_name, sizeof(current_function_name));
 
-    printf("Sanitizer Trace PC Guard : %p %x PC %s\n", PC, edge_id, symbolize_data);
+    printf("%d Sanitizer Trace PC Guard(count=%d) : %x %x PC %s\n",
+            __sancov_trace_pc_index,count,function_id, edge_id, symbolize_data);
 
-    __sancov_trace_pc_table[__sancov_trace_pc_index++] = edge_id;
+    __sancov_trace_pc_table[__sancov_trace_pc_index].current_address = edge_id;
+    __sancov_trace_pc_table[__sancov_trace_pc_index].current_function_edge_count = count;
+    __sancov_trace_pc_table[__sancov_trace_pc_index].current_function_entry = function_id;
+
+    __sancov_trace_pc_index++;
 }
 
-void dev_enter(void) {
+ATTRIBUTE_NO_SANITIZE_ALL
+void __sanitizer_enter(void) {
     memset(&__sancov_trace_pc_table,0,sizeof(__sancov_trace_pc_table));
 
     __sancov_trace_pc_index = 0;
 }
 
-void dev_exit(void) {
+ATTRIBUTE_NO_SANITIZE_ALL
+void __sanitizer_exit(void) {
+    uint_t trace_pc_count = __sancov_trace_pc_index;
+    uint_t pipe_write_size = trace_pc_count * sizeof(__sancov_trace_pc_map);
+
     printf("Sanitizer All Execute Edges : %d \n",__sancov_trace_pc_index);
 
-    /*
     if (__sancov_father_pid > 1) {
-        unsigned long pipe_write_size = __sancov_trace_pc_index * sizeof(unsigned long);
         char save_dir[MAX_PATH_SIZE] = {0};
 
         sprintf(save_dir,"./temp_%d_%d",__sancov_father_pid,getpid());
@@ -103,12 +110,11 @@ void dev_exit(void) {
 
         int save_data_handle = open(save_coverage_path,O_RDWR | O_CREAT,S_IRUSR | S_IWUSR | S_IROTH);
 
-        if (NULL == save_data_handle) {
-            printf("errno = %d \n",errno);
-
-            return;
+        for (int index = 0 ;index < trace_pc_count;++index) {
+            printf("Add:%X\n",__sancov_trace_pc_table[index].current_address);
         }
 
+        write(save_data_handle,&trace_pc_count,sizeof(trace_pc_count));
         write(save_data_handle,&__sancov_trace_pc_table,pipe_write_size);
         close(save_data_handle);
 
@@ -122,10 +128,9 @@ void dev_exit(void) {
     } else {
     }
 
-    memset(__sancov_trace_pc_table,0,__sancov_trace_pc_map_size);
+    memset(__sancov_trace_pc_table,0,pipe_write_size);
 
-    __sancov_trace_pc_index = 0;*/
-    __sanitizer_cov_dump();
+    __sancov_trace_pc_index = 0;
 }
 
 

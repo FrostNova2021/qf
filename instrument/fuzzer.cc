@@ -2,8 +2,11 @@
 #include <error.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <malloc.h>
+#include <memory.h>
 #include <signal.h>
 #include <stdio.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <sys/stat.h>
@@ -11,36 +14,192 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include <map>
+#include <vector>
+
 #include "sanitize_converage.h"
 #include "signal_number.h"
 
 #define MAX_FUZZER_READ_PIPE_DATA_SIZE (10 * 1024)
 #define MAX_FUZZER_SUBPROCESS 5
 
-
-typedef struct _ {
-    int pid;
-    int start_time;
-    int pipe_write;
-    int pipe_read;
-} subprocess_envirement;
+using namespace std;
 
 
-subprocess_envirement sub_fuzzer_share_memory_table[MAX_FUZZER_SUBPROCESS] = {0};
+
+class subprocess_fuzz_function {
+    public:
+        subprocess_fuzz_function() {
+
+        }
+
+        subprocess_fuzz_function(uint_t function_address,uint_t function_edge_count) {
+            this->function_address = function_address;
+            this->function_edge_count = function_edge_count;
+        }
+
+        bool is_exist_edge_id(uint_t edge_id) {
+            for (auto iterator = this->function_execute_edge_list.begin();
+                 iterator != this->function_execute_edge_list.end();
+                 ++iterator) {
+                if (*iterator == edge_id)
+                    return true;
+            }
+
+            return false;
+        }
+
+        void add_execute_edge(uint_t edge_id) {
+            if (this->is_exist_edge_id(edge_id))
+                return;
+
+            this->function_execute_edge_list.push_back(edge_id);
+        }
+
+        uint_t get_function_address(void) {
+            return this->function_address;
+        }
+
+        uint_t get_function_edge_count(void) {
+            return this->function_edge_count;
+        }
+
+        uint_t get_function_execute_edge_count(void) {
+            return this->function_execute_edge_list.size();
+        }
+
+    private:
+        uint_t function_address;
+        uint_t function_edge_count;
+        std::vector<uint_t> function_execute_edge_list;
+};
+
+class subprocess_fuzz_process {
+    public:
+        subprocess_fuzz_process() {
+        }
+
+        bool is_exist_function(uint_t function_address) {
+            if (this->process_function_table.count(function_address))
+                return true;
+
+            return false;
+        }
+
+        void add_function(uint_t function_address,uint_t function_edge_count) {
+            if (this->is_exist_function(function_address))
+                return;
+
+            subprocess_fuzz_function new_object(function_address,function_edge_count);
+
+            this->process_function_table[function_address] = new_object;
+        }
+
+        void add_function_execute_edge(uint_t function_address,uint_t edge_id) {
+            this->process_function_table[function_address].add_execute_edge(edge_id);
+        }
+
+        uint_t get_function_count() {
+            return this->process_function_table.size();
+        }
+
+        uint_t get_edge_count() {
+            uint_t edge_count = 0;
+
+            for (auto iterator = this->process_function_table.begin();
+                 iterator != this->process_function_table.end();
+                 ++iterator)
+                edge_count += iterator->second.get_function_edge_count();
+
+            return edge_count;
+        }
+
+        uint_t get_execute_edge_count() {
+            uint_t execute_edge_count = 0;
+
+            for (auto iterator = this->process_function_table.begin();
+                 iterator != this->process_function_table.end();
+                 ++iterator)
+                execute_edge_count += iterator->second.get_function_execute_edge_count();
+
+            return execute_edge_count;
+        }
+
+        ufloat get_coverage_rate() {
+            uint_t edge_count = this->get_edge_count();
+            uint_t execute_edge_count = this->get_execute_edge_count();
+
+            return ((ufloat)execute_edge_count / (ufloat)edge_count) * 100;
+        }
+
+    private:
+        std::map<uint_t,subprocess_fuzz_function> process_function_table;
+};
+
+class subprocess_envirement {
+    public:
+        subprocess_envirement(
+            uint_t pid,uint_t start_time) {
+            this->start_time = start_time;
+            this->pid = pid;
+        }
+
+        uint_t get_pid(void) {
+            return this->pid;
+        }
+
+        uint_t get_start_time(void) {
+            return this->start_time;
+        }
+
+    private:
+        uint_t pid;
+        uint_t start_time;
+};
+
+class subprocess_envirement_list {
+    public:
+        subprocess_envirement_list() {
+
+        }
+
+        bool is_exist(uint_t pid) {
+            for (auto iterator = list_data.begin();
+                 iterator != list_data.end();
+                 ++iterator) {
+                if (iterator->get_pid() == pid)
+                    return true;
+            }
+
+            return false;
+        }
+
+        subprocess_envirement* get_by_pid(uint_t pid) {
+            for (auto iterator = list_data.begin();
+                 iterator != list_data.end();
+                 ++iterator) {
+                if (iterator->get_pid() == pid)
+                    return (subprocess_envirement*)&iterator;
+            }
+            
+            return NULL;
+        }
+
+        void add_record(uint_t pid,uint_t start_time) {
+            subprocess_envirement new_object(pid,start_time);
+
+            list_data.push_back(new_object);
+        }
+
+    private:
+        std::vector<subprocess_envirement> list_data;
+};
+
+subprocess_envirement_list subprocess_envirement_table;
 int current_all_sub_fuzzer = 0;
 pid_t current_fuzzer_pid = 0;
 
 
-subprocess_envirement* get_subprocess_envirement(int pid) {
-    for (int index = 0;index < MAX_FUZZER_SUBPROCESS;++index) {
-        //printf("%d %d %d\n",pid,sub_fuzzer_share_memory_table[index].pid,sub_fuzzer_share_memory_table[index].start_time);
-        if (pid == sub_fuzzer_share_memory_table[index].pid) {
-            return &sub_fuzzer_share_memory_table[index];
-        }
-    }
-
-    return NULL;
-}
 
 void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
 {
@@ -57,8 +216,7 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
             
             printf("Create SubProcess Success ==> PID:%d \n",subprocess_pid);
 
-            sub_fuzzer_share_memory_table[current_all_sub_fuzzer].start_time = time();
-            sub_fuzzer_share_memory_table[current_all_sub_fuzzer].pid = subprocess_pid;
+            subprocess_envirement_table.add_record(subprocess_pid,time(NULL));
 
             current_all_sub_fuzzer++;
 
@@ -69,7 +227,7 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
 
             printf("SubProcess Fuzz ==> PID:%d All Edge:%d \n",subprocess_pid,trace_count);
 
-            subprocess_envirement* subprocess_data = get_subprocess_envirement(subprocess_pid);
+            subprocess_envirement* subprocess_data = subprocess_envirement_table.get_by_pid(subprocess_pid);
 
             if (NULL == subprocess_data) {
                 printf("Catch Error PID !! \n");
@@ -103,11 +261,24 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
                 read_offset += read_length;
             }
 
+            subprocess_fuzz_process fuzz_static;
+
             for (uint_t index = 0;index < trace_pc_map_count;++index) {
-                printf("%d %d Coverage ID %X ,Count %d\n",index,trace_pc_map_count,
-                        coverage_result[index].current_address,
+                printf("%d Coverage ID %X (%X) ,Count %d\n",index,
+                        coverage_result[index].current_edge_id,
+                        coverage_result[index].current_function_entry,
                         coverage_result[index].current_function_edge_count);
+
+                fuzz_static.add_function(coverage_result[index].current_function_entry,
+                    coverage_result[index].current_function_edge_count);
+                fuzz_static.add_function_execute_edge(coverage_result[index].current_function_entry,
+                    coverage_result[index].current_edge_id);
             }
+
+            printf("Fuzz Static :\n");
+            printf("  Coverage Edge Count %d\n",fuzz_static.get_edge_count());
+            printf("  Execute Edge Count %d\n",fuzz_static.get_execute_edge_count());
+            printf("  Coverage Rate %.2f%%\n",fuzz_static.get_coverage_rate());
 
             break;
         } default: {
@@ -132,12 +303,12 @@ int main(int argc,char** argv) {
 
     if(sigaction(SIGNAL_CREATE_FUZZER_TARGET,&action,NULL) < 0) {
         printf("sigaction error!\n");
-        exit(-1);
+        _exit(-1);
     }
 
     if(sigaction(SIGNAL_FUZZ_ONCE,&action,NULL) < 0) {
         printf("sigaction error!\n");
-        exit(-1);
+        _exit(-1);
     }
 
     printf("fuzzer pid = %d \n",getpid());

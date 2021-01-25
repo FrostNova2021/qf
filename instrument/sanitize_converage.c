@@ -60,8 +60,6 @@ void __sanitizer_cov_trace_pc_guard(uint32_t *guard,uint32_t count,uint32_t func
     uint_t edge_address = (uint_t)guard;
     uint_t edge_id = *guard;
 
-    printf("edge_id = %d\n",edge_id);
-
     if (!edge_id || !__sancov_trace_pc_switch)
         return;
 
@@ -75,7 +73,7 @@ void __sanitizer_cov_trace_pc_guard(uint32_t *guard,uint32_t count,uint32_t func
     printf("%d Sanitizer Trace PC Guard(count=%d) : %x %x PC %s\n",
             __sancov_trace_pc_index,count,function_id, edge_id, symbolize_data);
 
-    __sancov_trace_pc_table[__sancov_trace_pc_index].current_address = edge_id;
+    __sancov_trace_pc_table[__sancov_trace_pc_index].current_edge_id = edge_id;
     __sancov_trace_pc_table[__sancov_trace_pc_index].current_function_edge_count = count;
     __sancov_trace_pc_table[__sancov_trace_pc_index].current_function_entry = function_id;
 
@@ -109,10 +107,6 @@ void __sanitizer_exit(void) {
         sprintf(save_coverage_path,"%s/%d.dat",save_dir,__sancov_fuzz_loop);
 
         int save_data_handle = open(save_coverage_path,O_RDWR | O_CREAT,S_IRUSR | S_IWUSR | S_IROTH);
-
-        for (int index = 0 ;index < trace_pc_count;++index) {
-            printf("Add:%X\n",__sancov_trace_pc_table[index].current_address);
-        }
 
         write(save_data_handle,&trace_pc_count,sizeof(trace_pc_count));
         write(save_data_handle,&__sancov_trace_pc_table,pipe_write_size);

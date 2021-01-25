@@ -36,12 +36,14 @@
 
 #ifdef __x86_64__
 typedef uint64_t uint_t;
+typedef float    ufloat;
 #else
 typedef uint32_t uint_t;
+typedef float    ufloat;
 #endif
 
 typedef struct {
-    uint_t current_address;
+    uint_t current_edge_id;
     uint_t current_function_edge_count;
     uint_t current_function_entry;
 } __sancov_trace_pc_map;

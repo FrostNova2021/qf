@@ -18,7 +18,7 @@ int foo(int b) {
 
 
 int main(int argc,char** argv) {
-    dev_enter();
+    __sanitizer_enter();
 
     printf("main running !!!\n");
 
@@ -26,7 +26,7 @@ int main(int argc,char** argv) {
 
     printf("main exit !!\n");
 
-    dev_exit();
+    __sanitizer_exit();
     return 1;
 }
 

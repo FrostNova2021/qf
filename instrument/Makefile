@@ -10,6 +10,7 @@ all:
 	${CLANG}  -g example2.c sanitize_converage.o -fsanitize-coverage=trace-pc-guard -o example2
 	${CLANG}  -g example3.c sanitize_converage.o -fsanitize-coverage=trace-pc-guard -o example3
 	${CLANG}  -g example4.c sanitize_converage.o -fsanitize-coverage=trace-pc-guard -o example4
+	${CLANG}  -g example5.c sanitize_converage.o -fsanitize-coverage=trace-pc-guard -o example5
 	${CLANGPP}  fuzzer.cc -o fuzzer
 
 clean:
@@ -18,6 +19,7 @@ clean:
 	rm -rf example2
 	rm -rf example3
 	rm -rf example4
+	rm -rf example5
 	rm -rf fuzzer
 	rm -rf temp_*
 

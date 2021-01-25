@@ -1,5 +1,6 @@
 
 CLANG = clang-sp
+CLANGPP = clang++
 
 obj-m += kvm_hypercall.o
 
@@ -9,7 +10,7 @@ all:
 	${CLANG}  -g example2.c sanitize_converage.o -fsanitize-coverage=trace-pc-guard -o example2
 	${CLANG}  -g example3.c sanitize_converage.o -fsanitize-coverage=trace-pc-guard -o example3
 	${CLANG}  -g example4.c sanitize_converage.o -fsanitize-coverage=trace-pc-guard -o example4
-	${CLANG}  -g fuzzer.c -o fuzzer
+	${CLANGPP}  fuzzer.cc -o fuzzer
 
 clean:
 	rm -rf sanitize_converage.o

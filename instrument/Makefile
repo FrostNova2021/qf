@@ -8,6 +8,7 @@ all:
 	${CLANG}  -g example1.c sanitize_converage.o -fsanitize-coverage=trace-pc-guard -o example1
 	${CLANG}  -g example2.c sanitize_converage.o -fsanitize-coverage=trace-pc-guard -o example2
 	${CLANG}  -g example3.c sanitize_converage.o -fsanitize-coverage=trace-pc-guard -o example3
+	${CLANG}  -g example4.c sanitize_converage.o -fsanitize-coverage=trace-pc-guard -o example4
 	${CLANG}  -g fuzzer.c -o fuzzer
 
 clean:

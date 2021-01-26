@@ -30,9 +30,7 @@ using namespace std;
 
 class subprocess_fuzz_function {
     public:
-        subprocess_fuzz_function() {
-
-        }
+        subprocess_fuzz_function() {}
 
         subprocess_fuzz_function(uint_t function_address,uint_t function_edge_count) {
             this->function_address = function_address;
@@ -77,8 +75,7 @@ class subprocess_fuzz_function {
 
 class subprocess_fuzz_process {
     public:
-        subprocess_fuzz_process() {
-        }
+        subprocess_fuzz_process() {}
 
         bool is_exist_function(uint_t function_address) {
             if (this->process_function_table.count(function_address))
@@ -139,8 +136,7 @@ class subprocess_fuzz_process {
 
 class subprocess_envirement {
     public:
-        subprocess_envirement(
-            uint_t pid,uint_t start_time) {
+        subprocess_envirement(uint_t pid,uint_t start_time) {
             this->start_time = start_time;
             this->pid = pid;
         }
@@ -153,6 +149,8 @@ class subprocess_envirement {
             return this->start_time;
         }
 
+        subprocess_fuzz_process fuzz_static;
+
     private:
         uint_t pid;
         uint_t start_time;
@@ -160,9 +158,7 @@ class subprocess_envirement {
 
 class subprocess_envirement_list {
     public:
-        subprocess_envirement_list() {
-
-        }
+        subprocess_envirement_list() {}
 
         bool is_exist(uint_t pid) {
             for (auto iterator = list_data.begin();
@@ -180,7 +176,7 @@ class subprocess_envirement_list {
                  iterator != list_data.end();
                  ++iterator) {
                 if (iterator->get_pid() == pid)
-                    return (subprocess_envirement*)&iterator;
+                    return (subprocess_envirement*)&*iterator;
             }
             
             return NULL;
@@ -262,15 +258,15 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
                 read_offset += read_length;
             }
 
-            subprocess_fuzz_process fuzz_static;
+            subprocess_fuzz_process& fuzz_static = subprocess_envirement_table.get_by_pid(subprocess_pid)->fuzz_static;
 
             for (uint_t index = 0;index < trace_pc_map_count;++index) {
-                #ifdef IS_DEBUF_MODE
+                /*
                 printf("%d Coverage ID %X (%X) ,Count %d\n",index,
                         coverage_result[index].current_edge_id,
                         coverage_result[index].current_function_entry,
                         coverage_result[index].current_function_edge_count);
-                #endif
+                        */
 
                 fuzz_static.add_function(coverage_result[index].current_function_entry,
                     coverage_result[index].current_function_edge_count);
@@ -279,9 +275,12 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
             }
 
             printf("Fuzz Static :\n");
-            printf("  Coverage Edge Count %d\n",fuzz_static.get_edge_count());
+            printf("  Function Count %d\n",fuzz_static.get_function_count());
             printf("  Execute Edge Count %d\n",fuzz_static.get_execute_edge_count());
+            printf("  Coverage Edge Count %d\n",fuzz_static.get_edge_count());
             printf("  Coverage Rate %.2f%%\n",fuzz_static.get_coverage_rate());
+
+            free(coverage_result);
 
             break;
         } default: {

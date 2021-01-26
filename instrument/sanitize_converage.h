@@ -30,7 +30,7 @@
 #endif
 
 
-
+//#define IS_DEBUF_MODE
 
 #define MAX_PATH_SIZE 512
 

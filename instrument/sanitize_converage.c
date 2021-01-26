@@ -67,11 +67,13 @@ void __sanitizer_cov_trace_pc_guard(uint32_t *guard,uint32_t count,uint32_t func
     char symbolize_data[1024];
     char current_function_name[512];
 
-    __sanitizer_symbolize_pc(PC, "%p %F %L", symbolize_data, sizeof(symbolize_data));
+    #ifdef IS_DEBUF_MODE
+    __sanitizer_symbolize_pc(PC, "%p %F", symbolize_data, sizeof(symbolize_data));
     __sanitizer_symbolize_pc(PC, "%F", current_function_name, sizeof(current_function_name));
 
-    printf("%d Sanitizer Trace PC Guard(count=%d) : %x %x PC %s\n",
-            __sancov_trace_pc_index,count,function_id, edge_id, symbolize_data);
+    printf("%d Sanitizer Trace PC Guard(count=%d) : %x PC %s\n",
+            __sancov_trace_pc_index,count,edge_id, symbolize_data);
+    #endif
 
     __sancov_trace_pc_table[__sancov_trace_pc_index].current_edge_id = edge_id;
     __sancov_trace_pc_table[__sancov_trace_pc_index].current_function_edge_count = count;
@@ -85,6 +87,7 @@ void __sanitizer_enter(void) {
     memset(&__sancov_trace_pc_table,0,sizeof(__sancov_trace_pc_table));
 
     __sancov_trace_pc_index = 0;
+    __sancov_trace_pc_switch = 1;
 }
 
 ATTRIBUTE_NO_SANITIZE_ALL
@@ -92,29 +95,30 @@ void __sanitizer_exit(void) {
     uint_t trace_pc_count = __sancov_trace_pc_index;
     uint_t pipe_write_size = trace_pc_count * sizeof(__sancov_trace_pc_map);
 
+    #ifdef IS_DEBUF_MODE
     printf("Sanitizer All Execute Edges : %d \n",__sancov_trace_pc_index);
+    #endif
+
+    char save_dir[MAX_PATH_SIZE] = {0};
+
+    sprintf(save_dir,"./temp_%d_%d",__sancov_father_pid,getpid());
+
+    if (!opendir(save_dir))
+        mkdir(save_dir,0777);
+
+    char save_coverage_path[MAX_PATH_SIZE] = {0};
+
+    sprintf(save_coverage_path,"%s/%d.dat",save_dir,__sancov_fuzz_loop);
+
+    int save_data_handle = open(save_coverage_path,O_RDWR | O_CREAT,S_IRUSR | S_IWUSR | S_IROTH);
+
+    write(save_data_handle,&trace_pc_count,sizeof(trace_pc_count));
+    write(save_data_handle,&__sancov_trace_pc_table,pipe_write_size);
+    close(save_data_handle);
 
     if (__sancov_father_pid > 1) {
-        char save_dir[MAX_PATH_SIZE] = {0};
-
-        sprintf(save_dir,"./temp_%d_%d",__sancov_father_pid,getpid());
-
-        if (!opendir(save_dir))
-            mkdir(save_dir,0777);
-
-        char save_coverage_path[MAX_PATH_SIZE] = {0};
-
-        sprintf(save_coverage_path,"%s/%d.dat",save_dir,__sancov_fuzz_loop);
-
-        int save_data_handle = open(save_coverage_path,O_RDWR | O_CREAT,S_IRUSR | S_IWUSR | S_IROTH);
-
-        write(save_data_handle,&trace_pc_count,sizeof(trace_pc_count));
-        write(save_data_handle,&__sancov_trace_pc_table,pipe_write_size);
-        close(save_data_handle);
-
         union sigval send_sigval;
         send_sigval.sival_int = __sancov_fuzz_loop;
-
 
         sigqueue(__sancov_father_pid,SIGNAL_FUZZ_ONCE,send_sigval);
 
@@ -122,9 +126,10 @@ void __sanitizer_exit(void) {
     } else {
     }
 
-    memset(__sancov_trace_pc_table,0,pipe_write_size);
+    //memset(__sancov_trace_pc_table,0,pipe_write_size);
 
     __sancov_trace_pc_index = 0;
+    __sancov_trace_pc_switch = 0;
 }
 
 

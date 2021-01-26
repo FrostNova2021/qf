@@ -265,10 +265,12 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
             subprocess_fuzz_process fuzz_static;
 
             for (uint_t index = 0;index < trace_pc_map_count;++index) {
+                #ifdef IS_DEBUF_MODE
                 printf("%d Coverage ID %X (%X) ,Count %d\n",index,
                         coverage_result[index].current_edge_id,
                         coverage_result[index].current_function_entry,
                         coverage_result[index].current_function_edge_count);
+                #endif
 
                 fuzz_static.add_function(coverage_result[index].current_function_entry,
                     coverage_result[index].current_function_edge_count);

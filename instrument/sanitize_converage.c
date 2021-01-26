@@ -19,7 +19,7 @@
 
 
 
-static int __sancov_trace_pc_switch = 1;
+static int __sancov_trace_pc_switch = 0;
 static const size_t __sancov_trace_pc_map_max = 1 << 16;
 static const size_t __sancov_trace_pc_map_size = __sancov_trace_pc_map_max * sizeof(__sancov_trace_pc_map);
 static __sancov_trace_pc_map __sancov_trace_pc_table[__sancov_trace_pc_map_max] = {0};

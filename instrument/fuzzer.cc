@@ -15,6 +15,7 @@
 #include <sys/wait.h>
 
 #include <map>
+#include <string>
 #include <vector>
 
 #include "sanitize_converage.h"
@@ -289,8 +290,8 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
 }
 
 int main(int argc,char** argv) {
-    if (2 != argc) {
-        printf("Using: fuzzer %%detect_elf_path%% \n");
+    if (2 > argc) {
+        printf("Using: fuzzer %%detect_elf_path%% %%process_arg%% \n");
 
         return 1;
     }
@@ -313,10 +314,15 @@ int main(int argc,char** argv) {
 
     printf("fuzzer pid = %d \n",getpid());
 
+    char* execute_path = argv[1];
     int pid = fork();
 
     if (!pid) {
-        execl(argv[1],NULL);
+        if (2 == argc) {
+            execl(execute_path,NULL);
+        } else {
+            execvp(execute_path,&argv[1]);
+        }
     } else {
         int status;
         current_fuzzer_pid = getpid();

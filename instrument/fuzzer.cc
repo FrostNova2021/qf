@@ -220,9 +220,9 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
             break;
         } case SIGNAL_FUZZ_ONCE: {
             //  parameter  =>  fuzz_index
-            int trace_count = parameter;
+            int trace_round_id = parameter;
 
-            printf("SubProcess Fuzz ==> PID:%d All Edge:%d \n",subprocess_pid,trace_count);
+            printf("SubProcess Fuzz ==> PID:%d TraceRoundID:%d \n",subprocess_pid,trace_round_id);
 
             subprocess_envirement* subprocess_data = subprocess_envirement_table.get_by_pid(subprocess_pid);
 
@@ -234,7 +234,7 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
 
             char save_coverage_path[MAX_PATH_SIZE] = {0};
 
-            sprintf(save_coverage_path,"./temp_%d_%d/%d.dat",current_fuzzer_pid,subprocess_pid,trace_count);
+            sprintf(save_coverage_path,"./temp_%d_%d/%d.dat",current_fuzzer_pid,subprocess_pid,trace_round_id);
 
             int save_data_handle = open(save_coverage_path,O_RDONLY);
             struct stat file_state = {0};

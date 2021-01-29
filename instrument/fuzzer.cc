@@ -6,11 +6,14 @@
 #include <memory.h>
 #include <signal.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
 
-#include <sys/stat.h>
+#include <linux/netlink.h>
 #include <sys/msg.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -18,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "kernel_bridge.h"
 #include "sanitize_converage.h"
 #include "signal_number.h"
 
@@ -290,7 +294,96 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
     }
 }
 
+
+pthread_mutex_t thread_lock;
+
+
+void thread_fuzz_mutute() {
+    int socket_handle = socket(PF_NETLINK, SOCK_RAW, NETLINK_CHANNEL_ID);
+
+    if(socket_handle < 0) {
+        printf("Create Netlink Socket Error !\n");
+
+        return;
+    }
+
+    sockaddr_nl user;
+    sockaddr_nl kernel;
+
+    memset(&user,0,sizeof(user));
+    memset(&kernel,0,sizeof(kernel));
+
+    user.nl_family = AF_NETLINK;
+    user.nl_pid = getpid();
+    kernel.nl_family = AF_NETLINK;
+    kernel.nl_pid = 0;
+    kernel.nl_groups = 0;
+
+    bind(socket_handle,(struct sockaddr*)&user,sizeof(user));
+    #define MAX_PAYLOAD 1024
+    struct nlmsghdr* message_header_send = (struct nlmsghdr*)malloc(NLMSG_SPACE(MAX_PAYLOAD));
+    struct nlmsghdr* message_header_recv = (struct nlmsghdr*)malloc(NLMSG_SPACE(MAX_PAYLOAD));
+
+    user_message_header echo_test;
+
+    memset(message_header_send,0,NLMSG_SPACE(sizeof(echo_test)));// NLMSG_SPACE(MAX_PAYLOAD));
+    message_header_send->nlmsg_len = NLMSG_SPACE(sizeof(echo_test));//NLMSG_SPACE(MAX_PAYLOAD);
+    message_header_send->nlmsg_pid = getpid();
+    message_header_send->nlmsg_flags = 0;
+    echo_test.operation_id = KERNEL_BRIDGE_MESSAGE_ECHO;
+
+    memcpy((void*)NLMSG_DATA(message_header_send),&echo_test,sizeof(echo_test));
+
+    struct iovec iov_send = {
+        .iov_base = (void *)message_header_send,
+        .iov_len = message_header_send->nlmsg_len
+    };
+    struct iovec iov_receive = {
+        .iov_base = (void *)message_header_recv,
+        .iov_len = message_header_recv->nlmsg_len
+    };
+    struct msghdr message_data_send = {
+        .msg_name = (void *)&kernel,
+        .msg_namelen = sizeof(kernel),
+        .msg_iov = &iov_send,
+        .msg_iovlen = 1
+    };
+    struct msghdr message_data_receive = {
+        .msg_iov = &iov_receive,
+        .msg_iovlen = 1
+    };
+
+    sendmsg(socket_handle, &message_data_send, 0);
+    recvmsg(socket_handle, &message_data_receive, 0);
+
+    kernel_message_echo* kernel_message_header_ = (kernel_message_echo*)NLMSG_DATA(message_header_recv);
+    uint_t operation_id = kernel_message_header_->operation_id;
+
+    if (KERNEL_BRIDGE_MESSAGE_ECHO == operation_id) {
+        kernel_message_echo* message_echo = (kernel_message_echo*)kernel_message_header_;
+
+        printf("KVM_Hypercall Echo => %s\n",kernel_message_header_->echo_buffer);
+
+    } else {
+        printf("Unkonw Message ID %d \n",operation_id);
+    }
+
+    close(socket_handle);
+
+
+    pthread_mutex_lock(&thread_lock);
+    pthread_mutex_unlock(&thread_lock);
+
+    free(message_header_send);
+    free(message_header_recv);
+}
+
 int main(int argc,char** argv) {
+
+    pthread_mutex_init(&thread_lock, NULL);
+    thread_fuzz_mutute();
+    return 0;
+
     if (2 > argc) {
         printf("Using: fuzzer %%detect_elf_path%% %%process_arg%% \n");
 

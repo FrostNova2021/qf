@@ -298,92 +298,148 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
 pthread_mutex_t thread_lock;
 
 
-void thread_fuzz_mutute() {
-    int socket_handle = socket(PF_NETLINK, SOCK_RAW, NETLINK_CHANNEL_ID);
-
-    if(socket_handle < 0) {
-        printf("Create Netlink Socket Error !\n");
-
-        return;
-    }
-
-    sockaddr_nl user;
+void netlink_send(int socket_handle,void* send_buffer,int send_buffer_size) {
     sockaddr_nl kernel;
 
-    memset(&user,0,sizeof(user));
     memset(&kernel,0,sizeof(kernel));
 
-    user.nl_family = AF_NETLINK;
-    user.nl_pid = getpid();
     kernel.nl_family = AF_NETLINK;
     kernel.nl_pid = 0;
     kernel.nl_groups = 0;
 
-    bind(socket_handle,(struct sockaddr*)&user,sizeof(user));
-    #define MAX_PAYLOAD 1024
-    struct nlmsghdr* message_header_send = (struct nlmsghdr*)malloc(NLMSG_SPACE(MAX_PAYLOAD));
-    struct nlmsghdr* message_header_recv = (struct nlmsghdr*)malloc(NLMSG_SPACE(MAX_PAYLOAD));
-
-    user_message_header echo_test;
-
-    memset(message_header_send,0,NLMSG_SPACE(sizeof(echo_test)));// NLMSG_SPACE(MAX_PAYLOAD));
-    message_header_send->nlmsg_len = NLMSG_SPACE(sizeof(echo_test));//NLMSG_SPACE(MAX_PAYLOAD);
+    struct nlmsghdr* message_header_send = (struct nlmsghdr*)malloc(NLMSG_SPACE(send_buffer_size));
+    memset(message_header_send,0,NLMSG_SPACE(send_buffer_size));
+    message_header_send->nlmsg_len = NLMSG_SPACE(send_buffer_size);
     message_header_send->nlmsg_pid = getpid();
     message_header_send->nlmsg_flags = 0;
-    echo_test.operation_id = KERNEL_BRIDGE_MESSAGE_ECHO;
 
-    memcpy((void*)NLMSG_DATA(message_header_send),&echo_test,sizeof(echo_test));
+    memcpy((void*)NLMSG_DATA(message_header_send),send_buffer,send_buffer_size);
 
     struct iovec iov_send = {
         .iov_base = (void *)message_header_send,
         .iov_len = message_header_send->nlmsg_len
     };
-    struct iovec iov_receive = {
-        .iov_base = (void *)message_header_recv,
-        .iov_len = message_header_recv->nlmsg_len
-    };
+
     struct msghdr message_data_send = {
         .msg_name = (void *)&kernel,
         .msg_namelen = sizeof(kernel),
         .msg_iov = &iov_send,
         .msg_iovlen = 1
     };
+
+    sendmsg(socket_handle, &message_data_send, 0);
+
+    free(message_header_send);
+}
+
+nlmsghdr* netlink_recv(int socket_handle) {
+    struct nlmsghdr* message_header_recv = (struct nlmsghdr*)malloc(NLMSG_SPACE(MSG_MAX_LENGTH));
+    struct iovec iov_receive = {
+        .iov_base = (void *)message_header_recv,
+        .iov_len = message_header_recv->nlmsg_len
+    };
     struct msghdr message_data_receive = {
         .msg_iov = &iov_receive,
         .msg_iovlen = 1
     };
 
-    sendmsg(socket_handle, &message_data_send, 0);
-    recvmsg(socket_handle, &message_data_receive, 0);
+    if (-1 == recvmsg(socket_handle, &message_data_receive, 0)) {
+        free(message_header_recv);
 
-    kernel_message_echo* kernel_message_header_ = (kernel_message_echo*)NLMSG_DATA(message_header_recv);
-    uint_t operation_id = kernel_message_header_->operation_id;
+        return NULL;
+    }
+    
+    return message_header_recv;
+}
 
-    if (KERNEL_BRIDGE_MESSAGE_ECHO == operation_id) {
-        kernel_message_echo* message_echo = (kernel_message_echo*)kernel_message_header_;
+void thread_fuzz_mutute() {
+    int socket_handle = socket(PF_NETLINK, SOCK_RAW, NETLINK_CHANNEL_ID);
 
-        printf("KVM_Hypercall Echo => %s\n",kernel_message_header_->echo_buffer);
-
-    } else {
-        printf("Unkonw Message ID %d \n",operation_id);
+    if(socket_handle < 0) {
+        printf("Create Netlink Socket Error !\n");
+        exit(1);
     }
 
-    close(socket_handle);
+    sockaddr_nl user = {0};
+    timeval receive_timeout = {3,0};  //  block wait 3s
 
+    memset(&user,0,sizeof(user));
+
+    user.nl_family = AF_NETLINK;
+    user.nl_pid = getpid();
+
+    bind(socket_handle,(struct sockaddr*)&user,sizeof(user));
+    //setsockopt(socket_handle,SOL_SOCKET,SO_RCVTIMEO,(char *)&receive_timeout,sizeof(struct timeval));
+
+    //  Step1: Check kvm_hypercall_bridge 
+    user_message_header echo_test;
+
+    echo_test.operation_id = KERNEL_BRIDGE_MESSAGE_ECHO;
+
+    netlink_send(socket_handle,(void*)&echo_test,sizeof(echo_test));
+
+    nlmsghdr* message_header_recv = netlink_recv(socket_handle);
+
+    if (NULL == message_header_recv) {
+        printf("Kernel KVM_Bridge Not Exist!");
+        exit(1);
+    }
+
+    kernel_message_header* kernel_message_header_ = (kernel_message_header*)NLMSG_DATA(message_header_recv);
+
+    if (KERNEL_BRIDGE_MESSAGE_ECHO != kernel_message_header_->operation_id) {
+        printf("KVM_Bridge Echo Error!");
+        exit(1);
+    }
+
+    kernel_message_echo* kernel_message_echo_ = (kernel_message_echo*)kernel_message_header_;
+
+    printf("KVM_Hypercall Echo => %s\n",kernel_message_echo_->echo_buffer);
+    free(message_header_recv);
+
+    //  Step2 :Register kvm_hypercall_bridge 
+    user_message_register_fuzzer register_data = {
+        .header.operation_id = KERNEL_BRIDGE_MESSAGE_REGISTER,
+        .pid = getpid()
+    };
+
+    message_header_recv = netlink_recv(socket_handle);
+
+    if (NULL == message_header_recv) {
+        printf("Receive Register Message Error!");
+        exit(1);
+    }
+
+    kernel_message_header_ = (kernel_message_header*)NLMSG_DATA(message_header_recv);
+
+    if (KERNEL_BRIDGE_MESSAGE_SUCCESS != kernel_message_header_->operation_id) {
+        printf("KVM_Bridge Register Fuzzer Error!");
+        exit(1);
+    }
+
+    printf("KVM_Hypercall Register => Success\n");
+    free(message_header_recv);
+
+    //  Step3 :Loop for kvm_vmcall_record
+    while (1) {
+
+    }
+
+
+    close(socket_handle);
 
     pthread_mutex_lock(&thread_lock);
     pthread_mutex_unlock(&thread_lock);
 
-    free(message_header_send);
     free(message_header_recv);
 }
 
 int main(int argc,char** argv) {
-
+    
     pthread_mutex_init(&thread_lock, NULL);
     thread_fuzz_mutute();
     return 0;
-
+    
     if (2 > argc) {
         printf("Using: fuzzer %%detect_elf_path%% %%process_arg%% \n");
 

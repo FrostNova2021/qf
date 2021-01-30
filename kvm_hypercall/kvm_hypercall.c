@@ -65,65 +65,114 @@ int __get_kallsyms_lookup_name(void)
 }
 #endif
 
-
+static int fuzzer_pid = 0;
 struct sock* netlink_handle = NULL;
 
-static void netlink_receive_recall(struct sk_buff* buffer) {
+static void netlink_receive_recall(struct sk_buff* buffer) {  //  for fuzzer.cc
     struct nlmsghdr* message = (struct nlmsghdr*)buffer->data;
-    int pid = message->nlmsg_pid;
     user_message_header* recv_message_header = nlmsg_data(message);
     int operation_id = recv_message_header->operation_id;
+    int pid = message->nlmsg_pid;
+    struct sk_buff* output_buffer = nlmsg_new(MSG_MAX_LENGTH,0);
+    struct nlmsghdr* message_header = NULL;
+    kernel_message_echo* kernel_message_echo_ = NULL;
+    kernel_message_header* kernel_message_header_ = NULL;
 
     printk(KERN_INFO "netlink_receive_recall() ! => %d\n",operation_id);
 
-    struct sk_buff* output_buffer = NULL;
-    int output_buffer_size = 0;
-
     switch (operation_id) {
-        case KERNEL_BRIDGE_MESSAGE_ECHO: {
-            output_buffer_size = sizeof(kernel_message_echo);
-            output_buffer = nlmsg_new(output_buffer_size,0);
-            
-            if(!output_buffer) {
-                printk(KERN_ERR "Failed to allocate new skb\n");
+        case KERNEL_BRIDGE_MESSAGE_ECHO:
+            message_header = nlmsg_put(output_buffer,0,0,NLMSG_DONE,sizeof(kernel_message_echo),0);
+            kernel_message_echo_ = (kernel_message_echo*)nlmsg_data(message_header);
+            kernel_message_echo_->header.operation_id = operation_id;
+            kernel_message_echo_->echo_buffer_length = strlen(MSG_ECHO);
 
-                return;
-            }
-
-            kernel_message_echo* message_echo = (kernel_message_echo*)output_buffer;
-
-            message_echo->operation_id = operation_id;
-            message_echo->echo_buffer_length = strlen(MSG_ECHO);
-            memcpy(&message_echo->echo_buffer,MSG_ECHO,message_echo->echo_buffer_length);
-
-            printk(KERN_INFO "message_echo->echo_buffer_length = %d %d\n",message_echo->echo_buffer_length,output_buffer_size);
-            struct nlmsghdr* message_header = nlmsg_put(output_buffer,0,0,NLMSG_DONE,output_buffer_size,0);
-            NETLINK_CB(output_buffer).dst_group = 0;
-            memcpy(nlmsg_data(message_header),output_buffer,output_buffer_size);
+            memcpy(&kernel_message_echo_->echo_buffer,MSG_ECHO,kernel_message_echo_->echo_buffer_length);
+            printk(KERN_INFO "message_echo->echo_buffer_length = %d \n",kernel_message_echo_->echo_buffer_length);
 
             break;
-        } default: {}
+        case KERNEL_BRIDGE_MESSAGE_REGISTER:
+            message_header = nlmsg_put(output_buffer,0,0,NLMSG_DONE,sizeof(kernel_message_header),0);
+            user_message_register_fuzzer* user_message_check_online = nlmsg_data(message);
+            fuzzer_pid = user_message_check_online->pid;
+            kernel_message_header_ = (kernel_message_header*)nlmsg_data(message_header);
+            kernel_message_header_->operation_id = KERNEL_BRIDGE_MESSAGE_SUCCESS;
+
+            printk(KERN_INFO "Update Fuzzer pid %d\n",fuzzer_pid);
+
+            break;
+        default:
+            message_header = nlmsg_put(output_buffer,0,0,NLMSG_DONE,sizeof(kernel_message_header),0);
+            kernel_message_header_ = (kernel_message_header*)nlmsg_data(message_header);
+            kernel_message_header_->operation_id = KERNEL_BRIDGE_MESSAGE_ERROR;
+
+            printk(KERN_INFO "KVM_Hypercall Error Request Code \n");
+
+            break;
     }
 
-    if (NULL != output_buffer) {
-        nlmsg_unicast(netlink_handle,output_buffer,pid);
-        printk(KERN_INFO "Netlink send back data to %d\n",pid);
-    } else {
-        printk(KERN_ERR "Receive Error operation_id = %d\n",operation_id);
-    }
+    NETLINK_CB(output_buffer).dst_group = 0;
+    nlmsg_unicast(netlink_handle,output_buffer,pid);
+    printk(KERN_INFO "Netlink send back data to %d\n",pid);
 }
 
+#define GET_VMCALL_NUMBER(VALUE)     (VALUE = vcpu->arch.regs[VCPU_REGS_RAX])
+#define GET_VMCALL_PARAMETER1(VALUE) (VALUE = vcpu->arch.regs[VCPU_REGS_RBX])
+#define GET_VMCALL_PARAMETER2(VALUE) (VALUE = vcpu->arch.regs[VCPU_REGS_RCX])
+#define GET_VMCALL_PARAMETER3(VALUE) (VALUE = vcpu->arch.regs[VCPU_REGS_RDX])
+#define GET_VMCALL_PARAMETER4(VALUE) (VALUE = vcpu->arch.regs[VCPU_REGS_RSI])
+#define SET_VMCALL_RESULT(VALUE)     (vcpu->arch.regs[VCPU_REGS_RAX] = VALUE)
 
-static int buffervm_handle_vmcall(struct kvm_vcpu *vcpu) {
-    unsigned long vmcall_number = vcpu->arch.regs[VCPU_REGS_RAX];
+static int buffervm_handle_vmcall(struct kvm_vcpu *vcpu) {  //  for stub.c
+    uint_t vmcall_number;
+    GET_VMCALL_NUMBER(vmcall_number);
 
     printk("[%s] vmcall: 0x%lx\n", __this_module.name, vmcall_number);
 
     int result = (*vmcall_handle_func)(vcpu);
+    int fuzzing_entry,fuzzing_size,fuzzing_r1,fuzzing_r2;
 
     switch (vmcall_number) {
-        case HYPERCALL_CHECK_FUZZER :
+        case HYPERCALL_CHECK_FUZZER:
             printk(KERN_INFO "vmcall => HYPERCALL_CHECK_FUZZER \n");
+            SET_VMCALL_RESULT(HYPERCALL_FLAG_CHECK_FUZZER);
+
+            break;
+        case HYPERCALL_CHECK_READY:
+            printk(KERN_INFO "vmcall => HYPERCALL_CHECK_READY \n");
+            SET_VMCALL_RESULT(HYPERCALL_FLAG_SUCCESS);
+            
+            break;
+        case HYPERCALL_PUSH_RECORD:
+            GET_VMCALL_PARAMETER1(fuzzing_entry);
+            GET_VMCALL_PARAMETER2(fuzzing_size);
+            GET_VMCALL_PARAMETER3(fuzzing_r1);
+            GET_VMCALL_PARAMETER4(fuzzing_r2);
+
+            printk(KERN_INFO "vmcall => HYPERCALL_PUSH_RECORD fuzzing_entry=%X fuzzing_size=%X %X %X\n",
+                    fuzzing_entry,
+                    fuzzing_size,
+                    fuzzing_r1,
+                    fuzzing_r2);
+
+            if (!fuzzer_pid && !netlink_handle) {
+                int buffer_size = sizeof(kernel_message_record);
+                struct sk_buff* output_buffer = nlmsg_new(buffer_size,0);
+                struct nlmsghdr* message_header = nlmsg_put(output_buffer,0,0,NLMSG_DONE,buffer_size,0);
+                kernel_message_record* kernel_message_record_data = nlmsg_data(message_header);
+                kernel_message_record_data->header.operation_id = KERNEL_BRIDGE_MESSAGE_REGISTER;
+                kernel_message_record_data->fuzzing_entry = fuzzing_entry;
+                kernel_message_record_data->fuzzing_size = fuzzing_size;
+                kernel_message_record_data->fuzzing_r1 = fuzzing_r1;
+                kernel_message_record_data->fuzzing_r2 = fuzzing_r2;
+                NETLINK_CB(output_buffer).dst_group = 0;
+                nlmsg_unicast(netlink_handle,output_buffer,fuzzer_pid);
+                SET_VMCALL_RESULT(HYPERCALL_FLAG_SUCCESS);
+            } else {
+                SET_VMCALL_RESULT(HYPERCALL_FLAG_FAIL_FUZZER_OUTLINE);
+            }
+
+            break;
         default :
             break;
     }

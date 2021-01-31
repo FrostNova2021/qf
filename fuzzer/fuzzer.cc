@@ -1,9 +1,11 @@
 
 #include <error.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <inttypes.h>
 #include <malloc.h>
 #include <memory.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
@@ -25,11 +27,14 @@
 #include "sanitize_converage.h"
 #include "signal_number.h"
 
+#include "fuzzer_device_table.h"
+#include "fuzzer_mutite.h"
+
 #define MAX_FUZZER_READ_PIPE_DATA_SIZE (10 * 1024)
 #define MAX_FUZZER_SUBPROCESS 5
 
-using namespace std;
 
+using namespace std;
 
 
 class subprocess_fuzz_function {
@@ -294,9 +299,28 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
     }
 }
 
-
 pthread_mutex_t thread_lock;
+int socket_handle;
 
+void netlink_create(void) {
+    socket_handle = socket(PF_NETLINK,SOCK_RAW,NETLINK_CHANNEL_ID);
+
+    if(socket_handle < 0) {
+        printf("Create Netlink Socket Error !\n");
+        exit(1);
+    }
+
+    sockaddr_nl user = {0};
+    timeval receive_timeout = {3,0};  //  block wait 3s
+
+    memset(&user,0,sizeof(user));
+
+    user.nl_family = AF_NETLINK;
+    user.nl_pid = getpid();
+
+    bind(socket_handle,(struct sockaddr*)&user,sizeof(user));
+    //setsockopt(socket_handle,SOL_SOCKET,SO_RCVTIMEO,(char *)&receive_timeout,sizeof(struct timeval));
+}
 
 void netlink_send(int socket_handle,void* send_buffer,int send_buffer_size) {
     sockaddr_nl kernel;
@@ -333,17 +357,32 @@ void netlink_send(int socket_handle,void* send_buffer,int send_buffer_size) {
 }
 
 nlmsghdr* netlink_recv(int socket_handle) {
+    sockaddr_nl kernel;
+
+    memset(&kernel,0,sizeof(kernel));
+
+    kernel.nl_family = AF_NETLINK;
+    kernel.nl_pid = 0;
+    kernel.nl_groups = 0;
+
     struct nlmsghdr* message_header_recv = (struct nlmsghdr*)malloc(NLMSG_SPACE(MSG_MAX_LENGTH));
+    memset(message_header_recv, 0, NLMSG_SPACE(MSG_MAX_LENGTH));
+    message_header_recv->nlmsg_len = NLMSG_SPACE(MSG_MAX_LENGTH);
+    message_header_recv->nlmsg_pid = getpid();
+    message_header_recv->nlmsg_flags = 0;
+
     struct iovec iov_receive = {
         .iov_base = (void *)message_header_recv,
         .iov_len = message_header_recv->nlmsg_len
     };
     struct msghdr message_data_receive = {
+        .msg_name = (void *)&kernel,
+        .msg_namelen = sizeof(kernel),
         .msg_iov = &iov_receive,
         .msg_iovlen = 1
     };
 
-    if (-1 == recvmsg(socket_handle, &message_data_receive, 0)) {
+    if (-1 == recvmsg(socket_handle,&message_data_receive,0)) {
         free(message_header_recv);
 
         return NULL;
@@ -352,25 +391,7 @@ nlmsghdr* netlink_recv(int socket_handle) {
     return message_header_recv;
 }
 
-void thread_fuzz_mutute() {
-    int socket_handle = socket(PF_NETLINK, SOCK_RAW, NETLINK_CHANNEL_ID);
-
-    if(socket_handle < 0) {
-        printf("Create Netlink Socket Error !\n");
-        exit(1);
-    }
-
-    sockaddr_nl user = {0};
-    timeval receive_timeout = {3,0};  //  block wait 3s
-
-    memset(&user,0,sizeof(user));
-
-    user.nl_family = AF_NETLINK;
-    user.nl_pid = getpid();
-
-    bind(socket_handle,(struct sockaddr*)&user,sizeof(user));
-    //setsockopt(socket_handle,SOL_SOCKET,SO_RCVTIMEO,(char *)&receive_timeout,sizeof(struct timeval));
-
+void* thread_fuzz_monitor(void* argement) {
     //  Step1: Check kvm_hypercall_bridge 
     user_message_header echo_test;
 
@@ -403,6 +424,8 @@ void thread_fuzz_mutute() {
         .pid = getpid()
     };
 
+    netlink_send(socket_handle,(void*)&register_data,sizeof(register_data));
+
     message_header_recv = netlink_recv(socket_handle);
 
     if (NULL == message_header_recv) {
@@ -412,7 +435,7 @@ void thread_fuzz_mutute() {
 
     kernel_message_header_ = (kernel_message_header*)NLMSG_DATA(message_header_recv);
 
-    if (KERNEL_BRIDGE_MESSAGE_SUCCESS != kernel_message_header_->operation_id) {
+    if (KERNEL_BRIDGE_RESULT_SUCCESS != kernel_message_header_->operation_id) {
         printf("KVM_Bridge Register Fuzzer Error!");
         exit(1);
     }
@@ -422,9 +445,36 @@ void thread_fuzz_mutute() {
 
     //  Step3 :Loop for kvm_vmcall_record
     while (1) {
+        message_header_recv = netlink_recv(socket_handle);
 
+        if (NULL == message_header_recv) {
+            printf("Loop Receive KVM vmcall Message Error!");
+            exit(1);
+        }
+
+        kernel_message_header_ = (kernel_message_header*)NLMSG_DATA(message_header_recv);
+
+        if (KERNEL_BRIDGE_MESSAGE_RECORD != kernel_message_header_->operation_id) {
+            printf("Drop No Record Message! \n");
+            free(message_header_recv);
+
+            continue;
+        }
+
+        kernel_message_record* kernel_message_record_data = \
+            (kernel_message_record*)NLMSG_DATA(message_header_recv);
+        int fuzz_entry = GET_FUZZ_ENTRY(kernel_message_record_data->fuzzing_method);
+        int fuzz_io = GET_FUZZ_IO(kernel_message_record_data->fuzzing_method);
+        int fuzz_offset = GET_FUZZ_OFFSET(kernel_message_record_data->fuzzing_method);
+
+        printf("VM(%d) Fuzzing Data:%d %d %d %d %d %d\n",
+            fuzz_entry,
+            fuzz_io,
+            fuzz_offset,
+            kernel_message_record_data->fuzzing_size,
+            kernel_message_record_data->fuzzing_r1,
+            kernel_message_record_data->fuzzing_r2);
     }
-
 
     close(socket_handle);
 
@@ -432,19 +482,56 @@ void thread_fuzz_mutute() {
     pthread_mutex_unlock(&thread_lock);
 
     free(message_header_recv);
+
+    return 0;
+}
+
+fuzzer_device* get_device_infomation(char* device_name) {
+    for (int index = 0;index < sizeof(fuzzer_device_table);++index)
+        if (!strcmp(fuzzer_device_table[index].device_name,device_name))
+            return &fuzzer_device_table[index];
+
+    return NULL;
 }
 
 int main(int argc,char** argv) {
-    
-    pthread_mutex_init(&thread_lock, NULL);
-    thread_fuzz_mutute();
-    return 0;
-    
     if (2 > argc) {
-        printf("Using: fuzzer %%detect_elf_path%% %%process_arg%% \n");
+        printf("Using: fuzzer %%detect_elf_path%% %%qemu_command_argument%% \n");
 
         return 1;
     }
+
+    int device_flag = 1;
+
+    for (;device_flag < argc;++device_flag) {
+        if (!strcmp("-device",argv[device_flag])) {
+            device_flag += 1;
+
+            break;
+        }
+    }
+
+    if (argc <= device_flag) {
+        printf("Fuzzer can't not found -device option\n");
+
+        return 1;
+    }
+
+    char* device_name = argv[device_flag];
+    fuzzer_device* device_info = get_device_infomation(device_name);
+
+    if (NULL == device_info) {
+        printf("Ops ,this device(%s) no information\n",device_name);
+
+        return 1;
+    }
+
+    printf("Fuzzer Load Device %s \n",&device_info->device_name);
+    netlink_create();
+    pthread_mutex_init(&thread_lock, NULL);
+
+    pthread_t thread_data;
+    pthread_create(&thread_data,NULL,thread_fuzz_monitor,NULL);
 
     struct sigaction action;
     action.sa_sigaction = signal_handler;
@@ -467,13 +554,22 @@ int main(int argc,char** argv) {
     char* execute_path = argv[1];
     int pid = fork();
 
-    if (!pid) {
+    if (!pid) {  //  Qemu Process
+        //  Step 4: Update Qemu Process Device Infomation for Stub
+        bind_target_data device_data;
+
+        memcpy(&device_data,&device_info->device_data,sizeof(bind_target_data));
+
+        device_data.vm_pid = getpid();
+
+        netlink_send(socket_handle,&device_data,sizeof(bind_target_data));
+
         if (2 == argc) {
             execl(execute_path,NULL);
         } else {
             execvp(execute_path,&argv[1]);
         }
-    } else {
+    } else {  //  Fuzzer monitor
         int status;
         current_fuzzer_pid = getpid();
 

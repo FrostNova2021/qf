@@ -11,7 +11,7 @@ typedef struct {
 } fuzzer_device;
 
 fuzzer_device fuzzer_device_table[] = {
-    {"vuln-device",{0x00,0x6666,0xFF,0x1234,0x00,0x00,HYPERCALL_FLAG_FAIL_UNSUPPORT}} ,
+    {"vuln-device",{0x00,0x6666,0xFF00,0x1234,0x00,0x00,HYPERCALL_FLAG_FAIL_UNSUPPORT}} ,
 };
 
 #endif

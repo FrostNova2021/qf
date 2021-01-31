@@ -22,6 +22,7 @@
 #define MM_INDEX (0x00)
 #define MM_DATA  (0x04)
 #define MM_SIZE  (1024 * 4)
+#define MAX_PATH (1024)
 
 #define KVM_HYPERCALL "vmcall"
 
@@ -75,7 +76,7 @@ static inline long kvm_hypercall4(unsigned int nr, unsigned long p1,
 int is_qemu_fuzzer_kvm_envirement(void) {
     unsigned long result = kvm_hypercall0(HYPERCALL_CHECK_FUZZER);
 
-    printf("result = %d \n",result);
+    printf("result = %X \n",result);
 
     if (HYPERCALL_FLAG_CHECK_FUZZER == HYPERCALL_LOW_32BIT(result))
         return 1;
@@ -241,10 +242,10 @@ int read_file_data(char* path,int* output_data) {
 char* search_target_device(int device_id,int class_id,int vendor_id,int revision_id) {
     struct dirent* dirent_info = NULL;
     DIR* dir_info = opendir(LINUX_SYS_DEVICE_PATH);
-    char* temp_read_device_path[1024];
-    char* temp_read_class_path[1024];
-    char* temp_read_vendor_path[1024];
-    char* temp_read_revision_path[1024];
+    char* temp_read_device_path[MAX_PATH];
+    char* temp_read_class_path[MAX_PATH];
+    char* temp_read_vendor_path[MAX_PATH];
+    char* temp_read_revision_path[MAX_PATH];
 
     while ((NULL != (dirent_info = readdir(dir_info)))) {
         if (dirent_info->d_type & DT_DIR) {
@@ -272,8 +273,8 @@ char* search_target_device(int device_id,int class_id,int vendor_id,int revision
                 class_id == temp_class_id &&
                 vendor_id == temp_vendor_id &&
                 revision_id == temp_revision_id) {
-                char* result = (char*)malloc(1024);
-                memset(result,0,1024);
+                char* result = (char*)malloc(MAX_PATH);
+                memset(result,0,MAX_PATH);
                 sprintf(result,"%s/%s/",LINUX_SYS_DEVICE_PATH,&dirent_info->d_name);
 
                 return result;
@@ -321,12 +322,21 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    int mmio_handle = open(target_device_path,O_RDWR|O_SYNC);
+    char mmio_resource_path[MAX_PATH] = {0};
+
+    sprintf(&mmio_resource_path,"%s/resource%d",target_device_path,target_mmio_resource_id);
+
+    printf("QEMU Fuzzer Search Device Path %s \n",target_device_path);
+    printf("  Try to Read MMIO Entry %s \n",mmio_resource_path);
+    
+    int mmio_handle = open(mmio_resource_path,O_RDWR|O_SYNC);
     struct stat file_state = {0};
 
     fstat(mmio_handle, &file_state);
 
     unsigned char* mmio_mem = mmap(0,file_state.st_size,PROT_READ|PROT_WRITE,MAP_SHARED,mmio_handle,0);
+
+    printf("QEMU Fuzzer Mapping Address = %lX(%lX)\n",(unsigned int)mmio_mem,file_state.st_size);
 
     init_random();
 
@@ -339,12 +349,13 @@ int main(int argc, char *argv[]) {
                 random_data->random_fuzzing_r2
             );
 
-            if (HYPERCALL_FLAG_SUCCESS != push_fuzzing_record(
+            if (!push_fuzzing_record(
                 random_data->random_fuzzing_method,
                 random_data->random_fuzzing_size,
                 random_data->random_fuzzing_r1,
                 random_data->random_fuzzing_r2)) {
                 printf("Push Fuzzing Record with VMCALL Error!\n");
+                free(random_data);
 
                 continue;
             }
@@ -353,7 +364,7 @@ int main(int argc, char *argv[]) {
             int fuzz_io = GET_FUZZ_IO(random_data->random_fuzzing_method);
             int fuzz_offset = GET_FUZZ_OFFSET(random_data->random_fuzzing_method);
 
-            printf("Fuzzing Data:%d %d %d %d %d %d\n",
+            printf("Fuzzing Data:%d %d %X %d %X %X\n",
                 fuzz_entry,
                 fuzz_io,
                 fuzz_offset,
@@ -383,6 +394,8 @@ int main(int argc, char *argv[]) {
                 default:
                     break;
             }
+
+            free(random_data);
         }
 
         while (!is_qemu_fuzzer_ready_state()) {  //  fuzzer outline

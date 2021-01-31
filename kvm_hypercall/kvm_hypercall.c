@@ -258,7 +258,7 @@ static int buffervm_handle_vmcall(struct kvm_vcpu *vcpu) {  //  for stub.c
                     fuzzing_r1,
                     fuzzing_r2);
 
-            if (!fuzzer_pid && !netlink_handle) {
+            if (fuzzer_pid && netlink_handle) {
                 int buffer_size = sizeof(kernel_message_record);
                 struct sk_buff* output_buffer = nlmsg_new(buffer_size,0);
                 struct nlmsghdr* message_header = nlmsg_put(output_buffer,0,0,NLMSG_DONE,buffer_size,0);

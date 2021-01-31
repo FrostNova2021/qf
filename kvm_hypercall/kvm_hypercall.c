@@ -158,7 +158,7 @@ static void netlink_receive_recall(struct sk_buff* buffer) {  //  for fuzzer.cc
     user_message_bind_target* user_message_bind_target_ = NULL;
     NETLINK_CB(output_buffer).dst_group = 0;
 
-    printk(KERN_INFO "netlink_receive_recall() ! => %d\n",operation_id);
+    printk(KERN_INFO "netlink_receive_recall() operation_ID = %d\n",operation_id);
 
     switch (operation_id) {
         case KERNEL_BRIDGE_MESSAGE_ECHO:
@@ -205,7 +205,7 @@ static void netlink_receive_recall(struct sk_buff* buffer) {  //  for fuzzer.cc
             kernel_message_header_ = (kernel_message_header*)nlmsg_data(message_header);
             kernel_message_header_->operation_id = KERNEL_BRIDGE_RESULT_ERROR;
 
-            printk(KERN_INFO "KVM_Hypercall Error Request Code \n");
+            printk(KERN_INFO "KVM_Hypercall Error Request Code => %d\n",operation_id);
 
             break;
     }

@@ -267,7 +267,7 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
                 read_offset += read_length;
             }
 
-            subprocess_fuzz_process& fuzz_static = subprocess_envirement_table.get_by_pid(subprocess_pid)->fuzz_static;
+            subprocess_fuzz_process fuzz_static = subprocess_envirement_table.get_by_pid(subprocess_pid)->fuzz_static;
 
             for (uint_t index = 0;index < trace_pc_map_count;++index) {
                 /*
@@ -419,10 +419,9 @@ void* thread_fuzz_monitor(void* argement) {
     free(message_header_recv);
 
     //  Step2 :Register kvm_hypercall_bridge 
-    user_message_register_fuzzer register_data = {
-        .header.operation_id = KERNEL_BRIDGE_MESSAGE_REGISTER,
-        .pid = getpid()
-    };
+    user_message_register_fuzzer register_data = {0};
+    register_data.header.operation_id = KERNEL_BRIDGE_MESSAGE_REGISTER;
+    register_data.pid = getpid();
 
     netlink_send(socket_handle,(void*)&register_data,sizeof(register_data));
 
@@ -449,7 +448,8 @@ void* thread_fuzz_monitor(void* argement) {
 
         if (NULL == message_header_recv) {
             printf("Loop Receive KVM vmcall Message Error!");
-            exit(1);
+
+            continue;
         }
 
         kernel_message_header_ = (kernel_message_header*)NLMSG_DATA(message_header_recv);
@@ -556,11 +556,12 @@ int main(int argc,char** argv) {
 
     if (!pid) {  //  Qemu Process
         //  Step 4: Update Qemu Process Device Infomation for Stub
-        bind_target_data device_data;
+        user_message_bind_target device_data = {0};
 
-        memcpy(&device_data,&device_info->device_data,sizeof(bind_target_data));
+        memcpy(&device_data.data,&device_info->device_data,sizeof(bind_target_data));
 
-        device_data.vm_pid = getpid();
+        device_data.header.operation_id = KERNEL_BRIDGE_MESSAGE_BIND;
+        device_data.data.vm_pid = getpid();
 
         netlink_send(socket_handle,&device_data,sizeof(bind_target_data));
 

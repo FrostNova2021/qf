@@ -1,4 +1,5 @@
 
+#include <memory.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -15,6 +16,10 @@ typedef float    ufloat;
 
 #include "fuzzer_mutite.h"
 
+
+int size_table[] = {
+    1,2,4,8
+};
 
 void init_random(void) {
     srand((unsigned)time(NULL));
@@ -39,9 +44,16 @@ fuzz_data* fuzz_random_data_maker(int data_size) {
     if (fuzz_offset + RANDOM_FUZZING_SIZE_RANGE >= data_size) {  //  MMIO Buffer Write Check 
         int make_range = data_size - fuzz_offset;
 
-        result->random_fuzzing_size = rand() % make_range;
+        if (4 < make_range && make_range <= 8)  //  (4,8]
+            result->random_fuzzing_size = size_table[rand() % 4];
+        else if (2 < make_range && make_range <= 4)  //  (2,4]
+            result->random_fuzzing_size = size_table[rand() % 3];
+        else if (make_range == 2)  //  2
+            result->random_fuzzing_size = size_table[rand() % 2];
+        else  //  1 or other
+            result->random_fuzzing_size = 1;
     } else {
-        result->random_fuzzing_size = rand() % RANDOM_FUZZING_SIZE_RANGE;
+        result->random_fuzzing_size = size_table[rand() % sizeof(size_table)];
     }
 
     result->random_fuzzing_r1 = rand() % RANDOM_FUZZING_RANDOM_RANGE;

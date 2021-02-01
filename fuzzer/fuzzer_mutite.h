@@ -4,7 +4,7 @@
 
 #define RANDOM_FUZZING_READ_WRITE_RANGE  0x2
 #define RANDOM_FUZZING_ENTRY_RANGE       0x2
-#define RANDOM_FUZZING_SIZE_RANGE        0x2
+#define RANDOM_FUZZING_SIZE_RANGE        0x8
 
 #ifdef __x86_64__
 #define RANDOM_FUZZING_RANDOM_RANGE  0xFFFFFFFFFFFFFFFF
@@ -38,7 +38,7 @@ typedef struct {
 
 
 void  init_random(void);
-fuzz_data* fuzz_random_data_maker(void);
+fuzz_data* fuzz_random_data_maker(int data_size);
 char* data_maker_block(int data_size,int data_random1,int data_random2);
 uint_t data_maker_number(int data_size,int data_random1,int data_random2);
 

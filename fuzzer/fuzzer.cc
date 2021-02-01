@@ -468,6 +468,7 @@ void* thread_fuzz_monitor(void* argement) {
         int fuzz_offset = GET_FUZZ_OFFSET(kernel_message_record_data->fuzzing_method);
 
         printf("VM(%d) Fuzzing Data:%d %d %d %d %d %d\n",
+            kernel_message_record_data->vm_pid,
             fuzz_entry,
             fuzz_io,
             fuzz_offset,

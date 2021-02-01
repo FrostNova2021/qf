@@ -334,15 +334,16 @@ int main(int argc, char *argv[]) {
 
     fstat(mmio_handle, &file_state);
 
-    unsigned char* mmio_mem = mmap(0,file_state.st_size,PROT_READ|PROT_WRITE,MAP_SHARED,mmio_handle,0);
+    int mmio_mapping_size = file_state.st_size;
+    unsigned char* mmio_mapping_memory = mmap(0,mmio_mapping_size,PROT_READ|PROT_WRITE,MAP_SHARED,mmio_handle,0);
 
-    printf("QEMU Fuzzer Mapping Address = %lX(%lX)\n",(unsigned int)mmio_mem,file_state.st_size);
+    printf("QEMU Fuzzer Mapping Address = %lX(%lX)\n",(unsigned int)mmio_mapping_memory,mmio_mapping_size);
 
     init_random();
 
     while (1) {
         while (is_qemu_fuzzer_ready_state()) {  //  fuzzer online
-            fuzz_data* random_data = fuzz_random_data_maker();
+            fuzz_data* random_data = fuzz_random_data_maker(mmio_mapping_size);
             uint_t fuzz_value = data_maker_number(
                 random_data->random_fuzzing_size,
                 random_data->random_fuzzing_r1,
@@ -375,10 +376,10 @@ int main(int argc, char *argv[]) {
             switch (fuzz_entry) {
                 case RANDOM_FUZZING_ENTRY_MMIO:
                     if (RANDOM_FUZZING_READ == fuzz_io)
-                        mmio_read((memory_address)&mmio_mem[fuzz_offset],
+                        mmio_read((memory_address)&mmio_mapping_memory[fuzz_offset],
                                   random_data->random_fuzzing_size);
                     else
-                        mmio_write((memory_address)&mmio_mem[fuzz_offset],
+                        mmio_write((memory_address)&mmio_mapping_memory[fuzz_offset],
                                    &fuzz_value,
                                    random_data->random_fuzzing_size);
 

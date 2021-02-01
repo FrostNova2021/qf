@@ -20,14 +20,28 @@ void init_random(void) {
     srand((unsigned)time(NULL));
 }
 
-fuzz_data* fuzz_random_data_maker(void) {
+fuzz_data* fuzz_random_data_maker(int data_size) {
     fuzz_data* result = (fuzz_data*)malloc(sizeof(fuzz_data));
 
     if (NULL == result)
         return NULL;
 
-    result->random_fuzzing_method = rand() % RANDOM_FUZZING_RANDOM_RANGE;
-    result->random_fuzzing_size = rand() % RANDOM_FUZZING_SIZE_RANGE;
+    int fuzz_entry = rand() % RANDOM_FUZZING_ENTRY_RANGE;
+    int fuzz_io = rand() % RANDOM_FUZZING_READ_WRITE_RANGE;
+    int fuzz_offset = rand() % data_size;
+
+    SET_FUZZ_ENTRY(result->random_fuzzing_method,fuzz_entry);
+    SET_FUZZ_IO(result->random_fuzzing_method,fuzz_io);
+    SET_FUZZ_OFFSET(result->random_fuzzing_method,fuzz_offset);
+
+    if (fuzz_offset + RANDOM_FUZZING_SIZE_RANGE >= data_size) {  //  MMIO Buffer Write Check 
+        int make_range = data_size - fuzz_offset;
+        
+        result->random_fuzzing_size = rand() % make_range;
+    } else {
+        result->random_fuzzing_size = rand() % RANDOM_FUZZING_SIZE_RANGE;
+    }
+
     result->random_fuzzing_r1 = rand() % RANDOM_FUZZING_RANDOM_RANGE;
     result->random_fuzzing_r2 = rand() % RANDOM_FUZZING_RANDOM_RANGE;
 

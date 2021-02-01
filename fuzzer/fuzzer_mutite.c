@@ -44,11 +44,11 @@ fuzz_data* fuzz_random_data_maker(int data_size) {
     if (fuzz_offset + RANDOM_FUZZING_SIZE_RANGE >= data_size) {  //  MMIO Buffer Write Check 
         int make_range = data_size - fuzz_offset;
 
-        if (4 < make_range && make_range <= 8)  //  (4,8]
+        if (make_range == 8)  //  8
             result->random_fuzzing_size = size_table[rand() % 4];
-        else if (2 < make_range && make_range <= 4)  //  (2,4]
+        else if (4 <= make_range && make_range < 8)  //  [4,8)
             result->random_fuzzing_size = size_table[rand() % 3];
-        else if (make_range == 2)  //  2
+        else if (2 <= make_range && make_range < 4)  //  [2,4)
             result->random_fuzzing_size = size_table[rand() % 2];
         else  //  1 or other
             result->random_fuzzing_size = 1;

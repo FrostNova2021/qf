@@ -26,6 +26,8 @@ fuzz_data* fuzz_random_data_maker(int data_size) {
     if (NULL == result)
         return NULL;
 
+    memset(result,0,sizeof(fuzz_data));
+
     int fuzz_entry = rand() % RANDOM_FUZZING_ENTRY_RANGE;
     int fuzz_io = rand() % RANDOM_FUZZING_READ_WRITE_RANGE;
     int fuzz_offset = rand() % data_size;
@@ -36,7 +38,7 @@ fuzz_data* fuzz_random_data_maker(int data_size) {
 
     if (fuzz_offset + RANDOM_FUZZING_SIZE_RANGE >= data_size) {  //  MMIO Buffer Write Check 
         int make_range = data_size - fuzz_offset;
-        
+
         result->random_fuzzing_size = rand() % make_range;
     } else {
         result->random_fuzzing_size = rand() % RANDOM_FUZZING_SIZE_RANGE;

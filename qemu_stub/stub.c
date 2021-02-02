@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <sys/dir.h>
@@ -16,6 +17,7 @@
 #include <sys/io.h>
 
 #include "kernel_bridge.h"
+#include "fuzzer_device_table.h"
 #include "fuzzer_mutite.h"
 #include "stub_base.h"
 
@@ -156,6 +158,7 @@ int get_qemu_fuzzer_target_portio_resource(void) {
     return result;
 }
 
+
 int main(int argc, char *argv[]) {
     if (!is_qemu_fuzzer_kvm_envirement()) {
         printf("QEMU Fuzzer kvm envirement check running fail ! \n");
@@ -164,6 +167,14 @@ int main(int argc, char *argv[]) {
     }
 
     printf("QEMU Fuzzer kvm envirement check success\n");
+
+    int data_aligment = 0;
+
+    if (2 == argc) {
+        data_aligment = atoi(argv[1]);
+    } else {
+
+    }
 
     int target_device_id = get_qemu_fuzzer_target_device();
     int target_class_id = get_qemu_fuzzer_target_class();
@@ -181,11 +192,19 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    printf("QEMU Fuzzer Target => DeviceID:%X ClassID:%X VendorID:%X RevisionID:%X \n",
-        target_device_id,target_class_id,target_vendor_id,target_revision_id);
+    char* device_name = get_device_name_by_id(target_device_id,target_class_id,target_vendor_id,target_revision_id);
+    char* target_device_path = search_target_device(target_device_id,target_class_id,target_vendor_id,target_revision_id);
+    int device_register_map_size = 0;
+    device_register* device_register_map = get_device_register_map(device_name,&device_register_map_size);
+    
+    printf("QEMU Fuzzer Target (%s) => DeviceID:%X ClassID:%X VendorID:%X RevisionID:%X \n",
+        device_name,target_device_id,target_class_id,target_vendor_id,target_revision_id);
     printf("  => MMIO Resource Id = %d\n",target_mmio_resource_id);
 
-    char* target_device_path = search_target_device(target_device_id,target_class_id,target_vendor_id,target_revision_id);
+    if (NULL == device_register_map)
+        printf("Current Fuzzing Device Lost Register MAP \n");
+    else
+        printf("Fuzzing Device Map Size == %X \n",device_register_map_size);
 
     if (NULL == target_device_path) {
         printf("QEMU Fuzzer Search Device fail ! \n");
@@ -214,7 +233,13 @@ int main(int argc, char *argv[]) {
 
     while (1) {
         while (is_qemu_fuzzer_ready_state()) {  //  fuzzer online
-            fuzz_data* random_data = fuzz_random_data_maker(mmio_mapping_size);
+            fuzz_data* random_data = NULL;
+
+            if (NULL == device_register_map)
+                random_data = fuzz_random_data_maker(mmio_mapping_size);
+            else
+                random_data = fuzz_random_data_maker_by_device_register_map(device_register_map,device_register_map_size);
+
             uint_t fuzz_value = data_maker_number(
                 random_data->random_fuzzing_size,
                 random_data->random_fuzzing_r1,
@@ -236,6 +261,7 @@ int main(int argc, char *argv[]) {
             int fuzz_io = GET_FUZZ_IO(random_data->random_fuzzing_method);
             int fuzz_offset = GET_FUZZ_OFFSET(random_data->random_fuzzing_method);
 
+            #ifdef STUB_DEBUG_MODE
             printf("Fuzzing Data:%d %d %X %d %X %X\n",
                 fuzz_entry,
                 fuzz_io,
@@ -243,9 +269,11 @@ int main(int argc, char *argv[]) {
                 random_data->random_fuzzing_size,
                 random_data->random_fuzzing_r1,
                 random_data->random_fuzzing_r2);
-
+            usleep(10);
+            #endif
+            /*
             switch (fuzz_entry) {
-                case RANDOM_FUZZING_ENTRY_MMIO:
+                case RANDOM_FUZZING_ENTRY_MMIO:  */
                     if (RANDOM_FUZZING_READ == fuzz_io)
                         mmio_read((memory_address)&mmio_mapping_memory[fuzz_offset],
                                   random_data->random_fuzzing_size);
@@ -253,7 +281,7 @@ int main(int argc, char *argv[]) {
                         mmio_write((memory_address)&mmio_mapping_memory[fuzz_offset],
                                    &fuzz_value,
                                    random_data->random_fuzzing_size);
-
+                    /*
                     break;
                 case RANDOM_FUZZING_ENTRY_PORTIO:
                     if (RANDOM_FUZZING_READ == fuzz_io) {
@@ -265,7 +293,7 @@ int main(int argc, char *argv[]) {
                     break;
                 default:
                     break;
-            }
+            }  */
 
             free(random_data);
         }

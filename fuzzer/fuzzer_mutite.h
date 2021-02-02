@@ -39,6 +39,7 @@ typedef struct {
 
 void  init_random(void);
 fuzz_data* fuzz_random_data_maker(int data_size);
+fuzz_data* fuzz_random_data_maker_by_device_register_map(device_register* device_register_map,int device_register_map_count);
 char* data_maker_block(int data_size,int data_random1,int data_random2);
 uint_t data_maker_number(int data_size,int data_random1,int data_random2);
 

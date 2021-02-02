@@ -16,6 +16,7 @@
 #include <sys/io.h>
 
 #include "kernel_bridge.h"
+#include "fuzzer_device_table.h"
 #include "fuzzer_mutite.h"
 #include "stub_base.h"
 

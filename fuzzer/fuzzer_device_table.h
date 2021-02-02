@@ -5,13 +5,26 @@
 #define MAX_DEVICE_NAME 256
 
 
+#ifdef __KERNEL_BRIDGE_H__
+
 typedef struct {
     char device_name[MAX_DEVICE_NAME];
     bind_target_data device_data;
 } fuzzer_device;
 
-fuzzer_device fuzzer_device_table[] = {
-    {"vuln-device",{0x00,0x6666,0xFF00,0x1234,0x00,0x00,HYPERCALL_FLAG_FAIL_UNSUPPORT}} ,
-};
+extern fuzzer_device fuzzer_device_table[];
+extern int fuzzer_device_table_count;
+
+#endif
+
+typedef struct {
+    char register_name[MAX_DEVICE_NAME];
+    int  register_offset;
+    int  register_size;
+} device_register;
+
+extern device_register e1000_register[];
+extern int e1000_register_size;
+
 
 #endif

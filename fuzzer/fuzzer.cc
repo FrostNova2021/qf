@@ -201,14 +201,13 @@ class subprocess_envirement_list {
         std::vector<subprocess_envirement> list_data;
 };
 
+
 subprocess_envirement_list subprocess_envirement_table;
 int current_all_sub_fuzzer = 0;
 pid_t current_fuzzer_pid = 0;
 
 
-
-void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
-{
+void signal_handler(int signal_code,siginfo_t *singnal_info,void *p) {
     //if (SIGUSR1 != signal_code)
     //    return;
 
@@ -250,6 +249,13 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
 
             fstat(save_data_handle, &file_state);
 
+            if (!file_state.st_size) {
+                printf("Coverage Data %s is empty \n",save_coverage_path);
+                close(save_data_handle);
+
+                return;
+            }
+
             uint_t trace_pc_map_count = 0;
 
             read(save_data_handle,&trace_pc_map_count,sizeof(uint_t));
@@ -290,6 +296,8 @@ void signal_handler(int signal_code,siginfo_t *singnal_info,void *p)
             printf("  Coverage Rate %.2f%%\n",fuzz_static.get_coverage_rate());
 
             free(coverage_result);
+            close(save_data_handle);
+            remove(save_coverage_path);  //  << disk killer
 
             break;
         } default: {
@@ -467,7 +475,7 @@ void* thread_fuzz_monitor(void* argement) {
         int fuzz_io = GET_FUZZ_IO(kernel_message_record_data->fuzzing_method);
         int fuzz_offset = GET_FUZZ_OFFSET(kernel_message_record_data->fuzzing_method);
 
-        printf("VM(%d) Fuzzing Data:%d %d %d %d %d %d\n",
+        printf("VM(%d) Fuzzing Data:%d %d %X %d %X %X\n",
             kernel_message_record_data->vm_pid,
             fuzz_entry,
             fuzz_io,
@@ -475,6 +483,7 @@ void* thread_fuzz_monitor(void* argement) {
             kernel_message_record_data->fuzzing_size,
             kernel_message_record_data->fuzzing_r1,
             kernel_message_record_data->fuzzing_r2);
+        free(message_header_recv);
     }
 
     close(socket_handle);
@@ -482,13 +491,12 @@ void* thread_fuzz_monitor(void* argement) {
     pthread_mutex_lock(&thread_lock);
     pthread_mutex_unlock(&thread_lock);
 
-    free(message_header_recv);
 
     return 0;
 }
 
 fuzzer_device* get_device_infomation(char* device_name) {
-    for (int index = 0;index < sizeof(fuzzer_device_table);++index)
+    for (int index = 0;index < FUZZER_DEVICE_TABLE_SIZE;++index)
         if (!strcmp(fuzzer_device_table[index].device_name,device_name))
             return &fuzzer_device_table[index];
 

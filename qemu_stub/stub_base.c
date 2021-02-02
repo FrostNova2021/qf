@@ -16,6 +16,7 @@
 #include <sys/io.h>
 
 #include "kernel_bridge.h"
+#include "fuzzer_device_table.h"
 #include "fuzzer_mutite.h"
 #include "stub_base.h"
 
@@ -100,10 +101,10 @@ int read_file_data(char* path,int* output_data) {
 char* search_target_device(int device_id,int class_id,int vendor_id,int revision_id) {
     struct dirent* dirent_info = NULL;
     DIR* dir_info = opendir(LINUX_SYS_DEVICE_PATH);
-    char* temp_read_device_path[MAX_PATH];
-    char* temp_read_class_path[MAX_PATH];
-    char* temp_read_vendor_path[MAX_PATH];
-    char* temp_read_revision_path[MAX_PATH];
+    char temp_read_device_path[MAX_PATH];
+    char temp_read_class_path[MAX_PATH];
+    char temp_read_vendor_path[MAX_PATH];
+    char temp_read_revision_path[MAX_PATH];
 
     while ((NULL != (dirent_info = readdir(dir_info)))) {
         if (dirent_info->d_type & DT_DIR) {
@@ -142,4 +143,28 @@ char* search_target_device(int device_id,int class_id,int vendor_id,int revision
     
     return NULL;
 }
+
+char* get_device_name_by_id(int device_id,int class_id,int vendor_id,int revision_id) {
+    for (int index = 0;index < fuzzer_device_table_count;++index)
+        if (fuzzer_device_table[index].device_data.device_id == device_id &&
+            fuzzer_device_table[index].device_data.class_id == class_id &&
+            fuzzer_device_table[index].device_data.vendor_id == vendor_id &&
+            fuzzer_device_table[index].device_data.revision_id == revision_id)
+            return &fuzzer_device_table[index].device_name;
+    
+    return NULL;
+}
+
+device_register* get_device_register_map(char* device_name,int* output_device_register_size) {
+    if (!strcmp("e1000",device_name)) {
+        *output_device_register_size = e1000_register_size;
+
+        return &e1000_register;
+    }
+
+    *output_device_register_size = 0;
+
+    return NULL;
+}
+
 

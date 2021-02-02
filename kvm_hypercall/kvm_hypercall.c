@@ -23,6 +23,8 @@
 
 #include "kernel_bridge.h"
 
+//#define ENABLE_VMCALL_LOG
+
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Access non-exported symbols");
@@ -228,7 +230,9 @@ static int buffervm_handle_vmcall(struct kvm_vcpu *vcpu) {  //  for stub.c
     GET_VMCALL_NUMBER(vmcall_number);
     GET_VMCALL_VM_PID(vm_pid);
 
+    #ifdef ENABLE_VMCALL_LOG
     printk("[%s] VM-PID %d vmcall: 0x%lx\n",__this_module.name,vm_pid,vmcall_number);
+    #endif
 
     int result = (*vmcall_handle_func)(vcpu);
     int fuzzing_method,fuzzing_size,fuzzing_r1,fuzzing_r2;
@@ -237,12 +241,16 @@ static int buffervm_handle_vmcall(struct kvm_vcpu *vcpu) {  //  for stub.c
 
     switch (vmcall_number) {
         case HYPERCALL_CHECK_FUZZER:
+            #ifdef ENABLE_VMCALL_LOG
             printk(KERN_INFO "vmcall => HYPERCALL_CHECK_FUZZER \n");
+            #endif
             SET_VMCALL_RESULT(HYPERCALL_FLAG_CHECK_FUZZER);
 
             break;
         case HYPERCALL_CHECK_READY:
+            #ifdef ENABLE_VMCALL_LOG
             printk(KERN_INFO "vmcall => HYPERCALL_CHECK_READY \n");
+            #endif
             SET_VMCALL_RESULT(HYPERCALL_FLAG_SUCCESS);
             
             break;
@@ -252,11 +260,13 @@ static int buffervm_handle_vmcall(struct kvm_vcpu *vcpu) {  //  for stub.c
             GET_VMCALL_PARAMETER3(fuzzing_r1);
             GET_VMCALL_PARAMETER4(fuzzing_r2);
 
+            #ifdef ENABLE_VMCALL_LOG
             printk(KERN_INFO "vmcall => HYPERCALL_PUSH_RECORD fuzzing_method=%X fuzzing_size=%X %X %X\n",
                     fuzzing_method,
                     fuzzing_size,
                     fuzzing_r1,
                     fuzzing_r2);
+            #endif
 
             if (fuzzer_pid && netlink_handle) {
                 int buffer_size = sizeof(kernel_message_record);
@@ -281,12 +291,16 @@ static int buffervm_handle_vmcall(struct kvm_vcpu *vcpu) {  //  for stub.c
             bind_target_data_ = (bind_target_data*)get_bind_target(vm_pid);
             
             if (NULL == bind_target_data_) {
+                #ifdef ENABLE_VMCALL_LOG
                 printk(KERN_INFO "vmcall => HYPERCALL_GET_DEVICE Not-Found VM-PID=%d\n",vm_pid);
+                #endif
                 SET_VMCALL_RESULT(HYPERCALL_FLAG_FAIL_ERROR_ID);
             } else {
+                #ifdef ENABLE_VMCALL_LOG
                 printk(KERN_INFO "vmcall => HYPERCALL_GET_DEVICE VM-PID=%d DeviceID=%d\n",
                     vm_pid,
                     bind_target_data_->device_id);
+                #endif
                 SET_VMCALL_RESULT(bind_target_data_->device_id);
             }
 
@@ -295,12 +309,16 @@ static int buffervm_handle_vmcall(struct kvm_vcpu *vcpu) {  //  for stub.c
             bind_target_data_ = (bind_target_data*)get_bind_target(vm_pid);
             
             if (NULL == bind_target_data_) {
+                #ifdef ENABLE_VMCALL_LOG
                 printk(KERN_INFO "vmcall => HYPERCALL_GET_CLASS Not-Found VM-PID=%d\n",vm_pid);
+                #endif
                 SET_VMCALL_RESULT(HYPERCALL_FLAG_FAIL_ERROR_ID);
             } else {
+                #ifdef ENABLE_VMCALL_LOG
                 printk(KERN_INFO "vmcall => HYPERCALL_GET_CLASS VM-PID=%d ClassID=%d\n",
                     vm_pid,
                     bind_target_data_->class_id);
+                #endif
                 SET_VMCALL_RESULT(bind_target_data_->class_id);
             }
 
@@ -309,12 +327,16 @@ static int buffervm_handle_vmcall(struct kvm_vcpu *vcpu) {  //  for stub.c
             bind_target_data_ = (bind_target_data*)get_bind_target(vm_pid);
             
             if (NULL == bind_target_data_) {
+                #ifdef ENABLE_VMCALL_LOG
                 printk(KERN_INFO "vmcall => HYPERCALL_GET_VENDOR Not-Found VM-PID=%d\n",vm_pid);
+                #endif
                 SET_VMCALL_RESULT(HYPERCALL_FLAG_FAIL_ERROR_ID);
             } else {
+                #ifdef ENABLE_VMCALL_LOG
                 printk(KERN_INFO "vmcall => HYPERCALL_GET_VENDOR VM-PID=%d VendorID=%d\n",
                     vm_pid,
                     bind_target_data_->vendor_id);
+                #endif
                 SET_VMCALL_RESULT(bind_target_data_->vendor_id);
             }
 
@@ -323,12 +345,16 @@ static int buffervm_handle_vmcall(struct kvm_vcpu *vcpu) {  //  for stub.c
             bind_target_data_ = (bind_target_data*)get_bind_target(vm_pid);
             
             if (NULL == bind_target_data_) {
+                #ifdef ENABLE_VMCALL_LOG
                 printk(KERN_INFO "vmcall => HYPERCALL_GET_REVISION Not-Found VM-PID=%d\n",vm_pid);
+                #endif
                 SET_VMCALL_RESULT(HYPERCALL_FLAG_FAIL_ERROR_ID);
             } else {
+                #ifdef ENABLE_VMCALL_LOG
                 printk(KERN_INFO "vmcall => HYPERCALL_GET_REVISION VM-PID=%d RevisionID=%d\n",
                     vm_pid,
                     bind_target_data_->revision_id);
+                #endif
                 SET_VMCALL_RESULT(bind_target_data_->revision_id);
             }
 
@@ -337,12 +363,16 @@ static int buffervm_handle_vmcall(struct kvm_vcpu *vcpu) {  //  for stub.c
             bind_target_data_ = (bind_target_data*)get_bind_target(vm_pid);
             
             if (NULL == bind_target_data_) {
+                #ifdef ENABLE_VMCALL_LOG
                 printk(KERN_INFO "vmcall => HYPERCALL_GET_REVISION Not-Found VM-PID=%d\n",vm_pid);
+                #endif
                 SET_VMCALL_RESULT(HYPERCALL_FLAG_FAIL_ERROR_ID);
             } else {
+                #ifdef ENABLE_VMCALL_LOG
                 printk(KERN_INFO "vmcall => HYPERCALL_GET_REVISION VM-PID=%d MMIO-ResouceID=%d\n",
                     vm_pid,
                     bind_target_data_->mmio_resource);
+                #endif
                 SET_VMCALL_RESULT(bind_target_data_->mmio_resource);
             }
 
@@ -351,12 +381,16 @@ static int buffervm_handle_vmcall(struct kvm_vcpu *vcpu) {  //  for stub.c
             bind_target_data_ = (bind_target_data*)get_bind_target(vm_pid);
             
             if (NULL == bind_target_data_) {
+                #ifdef ENABLE_VMCALL_LOG
                 printk(KERN_INFO "vmcall => HYPERCALL_GET_REVISION Not-Found VM-PID=%d\n",vm_pid);
+                #endif
                 SET_VMCALL_RESULT(HYPERCALL_FLAG_FAIL_ERROR_ID);
             } else {
+                #ifdef ENABLE_VMCALL_LOG
                 printk(KERN_INFO "vmcall => HYPERCALL_GET_REVISION VM-PID=%d PortIO-ResourceID=%d\n",
                     vm_pid,
                     bind_target_data_->portio_resource);
+                #endif
                 SET_VMCALL_RESULT(bind_target_data_->portio_resource);
             }
 

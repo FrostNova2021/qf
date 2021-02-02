@@ -496,7 +496,7 @@ void* thread_fuzz_monitor(void* argement) {
 }
 
 fuzzer_device* get_device_infomation(char* device_name) {
-    for (int index = 0;index < FUZZER_DEVICE_TABLE_SIZE;++index)
+    for (int index = 0;index < fuzzer_device_table_count;++index)
         if (!strcmp(fuzzer_device_table[index].device_name,device_name))
             return &fuzzer_device_table[index];
 

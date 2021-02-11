@@ -69,7 +69,7 @@ device_register e1000_register[] = {
     {"E1000_FCRTL_A",0x00168,4},
     {"E1000_FCRTH",0x02168,4},
     {"E1000_FCRTH_A",0x00160,4},
-    {"E1000_PSRCTL",0x02170,4},
+    //{"E1000_PSRCTL",0x02170,4},
     {"E1000_RDBAL",0x02800,4},
     {"E1000_RDBAH",0x02804,4},
     {"E1000_RDLEN",0x02808,4},
